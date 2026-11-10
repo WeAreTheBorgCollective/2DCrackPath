@@ -1,22 +1,23 @@
 function [updated,Damage,info] = updateCrackLevelSetsRethore(LS,R,mask,parameters,options,baseDamage)
-%UPDATECRACKLEVELSETSRETHORE Move crack surface toward raw-residual maxima.
+%UPDATECRACKLEVELSETSRETHORE Move crack surface toward screened-residual maxima.
 % R MUST be f(X)-g(X+uPF), evaluated on original undamaged images.
 % Rethore et al. (2008), Eqs.35-36: normal velocity is signed crack-distance
-% to the largest |R| along a local normal. Eqs.26-32 propagate phi for unit
+% to the largest screened mean |R| along a local normal. Eqs.26-32 propagate phi for unit
 % virtual time, with a Godunov scheme. The finite connected zero-contour is
 % extracted and all three signed-distance fields reconstructed from it.
 % Curve-based exact distance reconstruction substitutes for PDE Eq.33.
 % Tip normals follow the same search; no separate tangential tip-growth law.
 %
-% options: searchRadius=8, sampleStep=0.25, tangentSpan=5,
+% options: screeningWindowSize=[23 23] (independent of initial screening),
+% searchRadius=8, sampleStep=0.25, tangentSpan=5,
 % smoothLength=3, duration=1, cfl=0.45, maxBacktracks=4.
-% Lengths are px. Smoothing/finite search and nondecreasing mean-|R| acceptance
+% Lengths are px. Smoothing/finite search and nondecreasing mean-screening-score acceptance
 % are numerical safeguards, not equations from the paper. PF total energy is
 % diagnostic only; this step is NOT rejected for increasing crack energy.
 if nargin<5, options=struct(); end
 if nargin<6, baseDamage=zeros(size(R)); end
 o=struct('searchRadius',8,'sampleStep',0.25,'tangentSpan',5, ...
-    'smoothLength',3,'duration',1,'cfl',0.45,'maxBacktracks',4);
+    'screeningWindowSize',[23 23],'smoothLength',3,'duration',1,'cfl',0.45,'maxBacktracks',4);
 names=fieldnames(options);
 for k=1:numel(names)
     if ~isfield(o,names{k}), error('rethore:Option','Unknown option: %s',names{k}); end
@@ -34,11 +35,17 @@ if ~isequal(size(R),LS.imageSize,size(mask)) || ~islogical(mask) || ...
 end
 p=phaseFieldParameters(parameters); path=LS.pathXY;
 s=[0;cumsum(vecnorm(diff(path),2,2))];
-before=pathScore(path,R,mask);
+screenInput=double(R); screenInput(~mask)=NaN;
+[screened,~,~]=screenResidual2D(screenInput,o.screeningWindowSize,0,0,0);
+screenMask=isfinite(screened);
+% Invalid full-window centers contribute zero to the whole-path score.
+% They never supply search targets or propagation speed; no raw-R fallback.
+scoreMap=screened; scoreMap(~screenMask)=0;
+before=pathScore(path,scoreMap,mask);
 Damage=createDamageField(LS,mask,p,baseDamage);
 energyBefore=phaseFieldEnergy2D(Damage,R,mask,p);
-raw=abs(double(R)); raw(~mask)=NaN;
-n=size(path,1); offset=zeros(n,1); targets=path; normals=zeros(n,2);
+raw=screened;
+n=size(path,1); supported=false(n,1); offset=zeros(n,1); targets=path; normals=zeros(n,2);
 sampleCount=max(1,ceil(o.searchRadius/o.sampleStep));
 samples=linspace(-o.searchRadius,o.searchRadius,2*sampleCount+1)';
 center=sampleCount+1;
@@ -52,6 +59,7 @@ for k=1:n
     allowed=interp2(double(mask),q(:,1),q(:,2),'linear',0)>1-1e-10 & isfinite(v);
     % Search only the contiguous valid interval containing the original point.
     if ~allowed(center), continue; end
+    supported(k)=true;
     a=center; b=center;
     while a>1 && allowed(a-1), a=a-1; end
     while b<numel(samples) && allowed(b+1), b=b+1; end
@@ -70,14 +78,17 @@ if o.smoothLength>0
         velocity(k)=sum(weights.*offset)/sum(weights);
     end
 end
+velocity(~supported)=0; % Smoothing must not activate unsupported centers.
 updated=LS;
 info=struct('accepted',false,'reason','stationary','meanResidualBefore',before, ...
     'meanResidualAfter',before,'energyBefore',energyBefore,'energyAfter',energyBefore, ...
     'targetOffsets',offset,'velocity',velocity,'targetPoints',targets, ...
-    'duration',0,'maxPathMotion',0,'substeps',0);
+    'duration',0,'maxPathMotion',0,'substeps',0, ...
+    'screeningWindowSize',o.screeningWindowSize,'validScreeningCenters',nnz(screenMask), ...
+    'meanScreeningBefore',before,'meanScreeningAfter',before);
 if max(abs(velocity))<1e-10, return; end
 % Extend speed off the curve by nearest-segment interpolation in a narrow band.
-band=mask & LS.distance<=o.searchRadius+3;
+band=screenMask & LS.distance<=o.searchRadius+3;
 [y,x]=find(band);
 [~,seg,t]=crackProjection2D(path,[x y]);
 F=zeros(size(R)); F(band)=(1-t).*velocity(seg)+t.*velocity(seg+1);
@@ -88,10 +99,11 @@ for attempt=0:o.maxBacktracks
     predictedTips=path([1 end],:)+duration*velocity([1 end]).*normals([1 end],:);
     candidate=finiteContour(phi,predictedTips,path,mask,o.searchRadius);
     if isempty(candidate), continue; end
-    score=pathScore(candidate,R,mask);
+    score=pathScore(candidate,scoreMap,mask);
     if score<=before+1e-8*max(1,before), continue; end
     updated=crackLevelSets2D(candidate,size(R));
     Damage=createDamageField(updated,mask,p,baseDamage);
+    info.meanScreeningAfter=score;
     info.accepted=true; info.reason='accepted'; info.meanResidualAfter=score;
     info.energyAfter=phaseFieldEnergy2D(Damage,R,mask,p);
     info.duration=duration; info.substeps=propagation.substeps;

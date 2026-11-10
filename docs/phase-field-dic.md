@@ -62,11 +62,11 @@ Damage=createDamageField(LS,measurementMask,parameters,[], ...
 
 ## Level-set updates
 
-The default driver now uses `updateCrackLevelSetsRethore`. At each crack vertex it searches along the local normal for the maximum **absolute original-image residual** `|f(X)-g(X+uPF)|`, with the latest accepted PF displacement. The speed is the signed crack distance of that maximum (Rethore Eqs. 35-36). `advectLevelSetGodunov` integrates `phi_t+F|grad(phi)|=0` with the one-sided Godunov derivatives of Eqs. 26-32 and CFL substeps.
+The default driver now uses `updateCrackLevelSetsRethore`. At each crack vertex it searches along the local normal for the maximum **screened mean absolute original-image residual** (a centered window average of `|f(X)-g(X+uPF)|`), with the latest accepted PF displacement. The speed is the signed crack distance of that maximum (Rethore Eqs. 35-36). `advectLevelSetGodunov` integrates `phi_t+F|grad(phi)|=0` with the one-sided Godunov derivatives of Eqs. 26-32 and CFL substeps.
 
 Defaults are an 8 px search radius, 0.25 px sampling, 5 px tangent span, 3 px arclength velocity smoothing, and unit virtual duration. Searches stop at ROI holes. The finite connected zero contour is extracted between the predicted endpoint positions, and all three distance fields and damage are rebuilt. Exact curve-distance reconstruction replaces the paper's PDE reinitialization (Eq. 33); smoothing, finite search, and acceptance safeguards are implementation adaptations. Endpoint motion follows the normal search; there is no separate tangential crack-growth rule.
 
-Backtracking requires an increased mean absolute residual sampled uniformly along the path and rejects self-intersections, ROI exits, and excessive contour excursions. Total PF energy is recorded but does **not** veto geometry motion: residual maximization and phase-field energy minimization are different objectives. The old `updateCrackLevelSets` energy-gradient method remains available for comparison.
+Backtracking requires an increased mean screening score sampled uniformly along the path and rejects self-intersections, ROI exits, and excessive contour excursions. Total PF energy is recorded but does **not** veto geometry motion: screening-score maximization and phase-field energy minimization are different objectives. The old `updateCrackLevelSets` energy-gradient method remains available for comparison.
 
 To refine an existing final PF solution, run:
 
@@ -101,3 +101,28 @@ assertSuccess(results);
 ```
 
 The residual-driven refinement was run from the previous final PF solution: all three shape updates were accepted, increasing mean raw |R| along the curve from 501.356 to 631.393, 631.670, and 647.325 gray levels. PF energy changed from 247.642 to 255.080; this geometry objective does not minimize that energy. All three displacement proposals were rejected, so displacement and full-image raw residual are unchanged. All 23 MATLAB tests passed, including propagation sign, negative residual magnitude, flat-profile stationarity, and ROI-hole isolation. Higher residual alignment is not independent validation of the physical crack location.
+
+## Independent screening windows
+
+Initial screening now defaults to `windowSize=[23 23]` in both
+`screenResidualImage` and the standalone `extractResidualCrackPath`.
+The extractor still reuses an existing workspace `rho`; clear it or rerun
+`screenResidualImage` when changing its window.
+
+Level-set geometry now searches the screened mean absolute residual instead of
+individual residual pixels. It recomputes `screenResidual2D` from the latest
+undamaged-image PF residual at every update. Set
+`levelSetOptions.screeningWindowSize=[23 23]` in `runPhaseFieldDIC`, or
+`options.screeningWindowSize=[23 23]` in `refineCrackPathRethore`.
+These are independent of the initial screening window. Odd rectangular windows,
+for example `[7 15]`, are supported; `[1 1]` recovers the raw magnitude rule.
+
+Only complete finite windows inside the measurement ROI are used. Unsupported
+centers supply no velocity or search targets, and count as zero in the
+whole-path mean screening score used for acceptance (no raw-residual fallback).
+The grid speed is zero outside screening support. If no full windows are
+available, geometry remains unchanged. Diagnostic fields
+`meanScreeningBefore/After` and `screeningWindowSize` record this objective;
+the legacy `meanResidualBefore/After` fields alias the screening scores.
+PF energy and displacement acceptance still use the original unscreened residual.
+The earlier raw-residual validation numbers above describe the previous method.

@@ -1,8 +1,8 @@
 %% Screen the saved 2D DIC residual (Report, Section 4.2)
 % Run this script from the project root, or use run with its full path.
-% Edit the settings below. Defaults follow the 1D example; the threshold
+% Edit the settings below. The default window is 23 x 23; the threshold
 % must be calibrated for the noise and gray-level scale of your 2D data.
-windowSize = [11 11];       % [height width], odd pixel counts (e.g. [11 21])
+windowSize = [23 23];       % [height width], odd pixel counts (e.g. [11 21])
 residualThreshold = 5;     % mean absolute residual threshold [GL]
 maxCandidates = 5;
 minCandidateDistance = 5;  % Euclidean distance between centers [px]
