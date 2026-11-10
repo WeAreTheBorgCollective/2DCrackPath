@@ -52,4 +52,12 @@ if ~isempty(crackPathXY)
     plot(ax,crackPathXY(:,1),crackPathXY(:,2),'r-','LineWidth',1.5);
 end
 title(ax,sprintf('Principal path: %.1f px',graphInfo.pathLength));
-% Outputs remain in the workspace. No input files are modified.
+%% Persist the ordered initial crack path for level sets and phase-field DIC
+if size(crackPathXY,1)<2
+    error('extractResidualCrackPath:Empty','No usable crack path; initialization was not saved.');
+end
+crackFolder=fullfile(projectRoot,'CrackPaths');
+if ~isfolder(crackFolder), mkdir(crackFolder); end
+imageSize=size(rho);
+save(fullfile(crackFolder,'CrackPathInit.mat'), ...
+    'crackPathXY','crackPathMask','imageSize','graphInfo','-v7');
