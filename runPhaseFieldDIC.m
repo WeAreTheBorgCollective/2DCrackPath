@@ -1,4 +1,4 @@
-%% Geometry-constrained phase-field DIC, without mechanical driving energy
+%% Phase-field DIC with Rethore raw-residual-driven crack shape updates
 % Workflow: example2Dscreening -> extractResidualCrackPath -> this script.
 % Requires Correli on path. Generated MAT files are saved relative to project.
 projectRoot=fileparts(mfilename('fullpath')); addpath(projectRoot); setupPaths;
@@ -26,8 +26,8 @@ Damage=createDamageField(levelSets,measurementMask,parameters,baseDamage, ...
 energyHistory=phaseFieldEnergy2D(Damage,R,measurementMask,parameters);
 updateHistory=cell(parameters.outerIterations,2);
 for iteration=1:parameters.outerIterations
-    [levelSets,Damage,shapeInfo]=updateCrackLevelSets( ...
-        levelSets,R,measurementMask,parameters,baseDamage);
+    [levelSets,Damage,shapeInfo]=updateCrackLevelSetsRethore( ...
+        levelSets,R,measurementMask,parameters,struct(),baseDamage);
     [a,R,dicInfo]=correlatePhaseField(f,g,Mesh,a,R,Damage,measurementMask,parameters);
     updateHistory(iteration,:)={shapeInfo,dicInfo};
     energyHistory(end+1,1)=phaseFieldEnergy2D(Damage,R,measurementMask,parameters); %#ok<SAGROW>
@@ -48,4 +48,4 @@ ax=nexttile; im=imagesc(ax,R); im.AlphaData=measurementMask; axis(ax,'image'); h
 plot(ax,initialLevelSets.pathXY(:,1),initialLevelSets.pathXY(:,2),'w--');
 plot(ax,levelSets.pathXY(:,1),levelSets.pathXY(:,2),'r-'); title(ax,'Initial / updated crack');
 ax=nexttile; plot(ax,0:numel(energyHistory)-1,energyHistory,'o-'); grid(ax,'on');
-xlabel(ax,'Staggered step'); ylabel(ax,'PF energy'); title(ax,'Accepted total energy');
+xlabel(ax,'Staggered step'); ylabel(ax,'PF energy'); title(ax,'PF energy (diagnostic for geometry)');
