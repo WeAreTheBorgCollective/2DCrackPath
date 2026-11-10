@@ -1,4 +1,4 @@
-%% Resume the FINAL accepted PF displacement and refine the crack by raw |R|
+%% Resume the FINAL accepted PF displacement and refine the crack by screened |R|
 % Does not modify extractResidualCrackPath. Original outputs are backed up.
 projectRoot=fileparts(mfilename('fullpath')); addpath(projectRoot); setupPaths;
 if exist('correli_pathdef','file')==2, addpath(correli_pathdef); end
@@ -19,7 +19,8 @@ R=kernel(f,g,reshape(a.',[],1),'R'); beforeResidual=R;
 if any(~isfinite(R(measurementMask)))
     error('refineCrackPathRethore:Coverage','Final PF displacement loses original ROI coverage.');
 end
-options=struct('searchRadius',8,'sampleStep',0.25,'smoothLength',3,'duration',1);
+options=struct('screeningWindowSize',[23 23], ... % independent of initial window
+    'searchRadius',8,'sampleStep',0.25,'smoothLength',3,'duration',1);
 iterations=3;
 baseDamage=saved.Damage; Damage=createDamageField(levelSets,measurementMask,parameters,baseDamage);
 energyHistory=phaseFieldEnergy2D(Damage,R,measurementMask,parameters);
@@ -32,8 +33,8 @@ for k=1:iterations
     [a,R,dicInfo]=correlatePhaseField(f,g,Mesh,a,R,Damage,measurementMask,parameters);
     updateHistory(k,:)={shapeInfo,dicInfo};
     energyHistory(end+1,1)=phaseFieldEnergy2D(Damage,R,measurementMask,parameters); %#ok<SAGROW>
-    fprintf('Rethore step %d: mean raw |R| on crack %.4f -> %.4f GL; shape=%d; DIC=%d; E=%.6f\n', ...
-        k,shapeInfo.meanResidualBefore,shapeInfo.meanResidualAfter,shapeInfo.accepted, ...
+    fprintf('Rethore step %d: mean screening score on crack %.4f -> %.4f GL; shape=%d; DIC=%d; E=%.6f\n', ...
+        k,shapeInfo.meanScreeningBefore,shapeInfo.meanScreeningAfter,shapeInfo.accepted, ...
         dicInfo.accepted,energyHistory(end));
 end
 folder=fullfile(projectRoot,'Damage');

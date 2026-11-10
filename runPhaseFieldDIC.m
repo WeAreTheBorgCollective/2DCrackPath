@@ -1,4 +1,4 @@
-%% Phase-field DIC with Rethore raw-residual-driven crack shape updates
+%% Phase-field DIC with Rethore screened-residual-driven crack shape updates
 % Workflow: example2Dscreening -> extractResidualCrackPath -> this script.
 % Requires Correli on path. Generated MAT files are saved relative to project.
 projectRoot=fileparts(mfilename('fullpath')); addpath(projectRoot); setupPaths;
@@ -25,9 +25,11 @@ Damage=createDamageField(levelSets,measurementMask,parameters,baseDamage, ...
     fullfile(damageFolder,'Damage.mat'));
 energyHistory=phaseFieldEnergy2D(Damage,R,measurementMask,parameters);
 updateHistory=cell(parameters.outerIterations,2);
+levelSetOptions=struct('screeningWindowSize',[23 23]); % independent [height width]
+
 for iteration=1:parameters.outerIterations
     [levelSets,Damage,shapeInfo]=updateCrackLevelSetsRethore( ...
-        levelSets,R,measurementMask,parameters,struct(),baseDamage);
+        levelSets,R,measurementMask,parameters,levelSetOptions,baseDamage);
     [a,R,dicInfo]=correlatePhaseField(f,g,Mesh,a,R,Damage,measurementMask,parameters);
     updateHistory(iteration,:)={shapeInfo,dicInfo};
     energyHistory(end+1,1)=phaseFieldEnergy2D(Damage,R,measurementMask,parameters); %#ok<SAGROW>
@@ -35,7 +37,7 @@ for iteration=1:parameters.outerIterations
         iteration,energyHistory(end-1),energyHistory(end),shapeInfo.accepted,dicInfo.accepted);
 end
 save(fullfile(damageFolder,'Damage.mat'),'Damage','measurementMask','levelSets', ...
-    'initialLevelSets','parameters','energyHistory','updateHistory','-v7');
+    'initialLevelSets','parameters','energyHistory','updateHistory','levelSetOptions','-v7');
 save(fullfile(damageFolder,'PhaseFieldResult.mat'),'a','R','Mesh','parameters', ...
     'energyHistory','-v7');
 figure('Color','w','Position',[60 60 1400 650]);

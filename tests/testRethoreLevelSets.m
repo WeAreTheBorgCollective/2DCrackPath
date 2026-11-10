@@ -15,7 +15,7 @@ end
 function testNegativeResidualRidgeAndTipRebuild(tc)
 [~,y]=meshgrid(1:60,1:50); R=-100*exp(-(y-24).^2/2);
 LS=crackLevelSets2D([(10:50)' 20*ones(41,1)],size(R));
-[new,d,info]=updateCrackLevelSetsRethore(LS,R,true(size(R)),struct());
+[new,d,info]=updateCrackLevelSetsRethore(LS,R,true(size(R)),struct(),struct('screeningWindowSize',[1 1]));
 verifyTrue(tc,info.accepted);
 verifyGreaterThan(tc,info.meanResidualAfter,info.meanResidualBefore);
 verifyEqual(tc,median(new.pathXY(:,2)),24,'AbsTol',0.3);
@@ -36,7 +36,31 @@ function testCannotJumpDomainHole(tc)
 [~,y]=meshgrid(1:60,1:50); R=100*exp(-(y-27).^2/2);
 mask=true(size(R)); mask(23:24,:)=false; R(~mask)=NaN;
 LS=crackLevelSets2D([(10:50)' 20*ones(41,1)],size(R));
-[new,~,~]=updateCrackLevelSetsRethore(LS,R,mask,struct());
+[new,~,~]=updateCrackLevelSetsRethore(LS,R,mask,struct(),struct('screeningWindowSize',[1 1]));
 verifyLessThanOrEqual(tc,max(new.pathXY(:,2)),22+1e-8);
 verifyTrue(tc,crackPathInDomain(new.pathXY,mask));
+end
+
+function testIndependentScreeningWindows(tc)
+R=zeros(80,80); R(38,:)=100; R(42:48,:)=30;
+LS=crackLevelSets2D([(20:60)' 40*ones(41,1)],size(R));
+[~,~,raw]=updateCrackLevelSetsRethore(LS,R,true(size(R)),struct(), ...
+    struct('screeningWindowSize',[1 1]));
+[new,~,screen]=updateCrackLevelSetsRethore(LS,R,true(size(R)),struct(), ...
+    struct('screeningWindowSize',[7 3]));
+verifyLessThan(tc,median(raw.targetPoints(:,2)),40);
+verifyGreaterThan(tc,median(screen.targetPoints(:,2)),40);
+verifyTrue(tc,screen.accepted);
+verifyGreaterThan(tc,median(new.pathXY(:,2)),40);
+verifyEqual(tc,screen.screeningWindowSize,[7 3]);
+verifyGreaterThan(tc,screen.meanScreeningAfter,screen.meanScreeningBefore);
+end
+function testDefaultWindowAndNoCompleteWindows(tc)
+R=ones(50,60); mask=false(size(R)); mask(20:30,:)=true;
+LS=crackLevelSets2D([15 25;45 25],size(R));
+[new,~,info]=updateCrackLevelSetsRethore(LS,R,mask,struct());
+verifyEqual(tc,info.screeningWindowSize,[23 23]);
+verifyEqual(tc,info.validScreeningCenters,0);
+verifyFalse(tc,info.accepted); verifyEqual(tc,new,LS);
+verifyEqual(tc,info.velocity,zeros(2,1));
 end

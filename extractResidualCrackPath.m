@@ -3,7 +3,7 @@
 % An existing rho is used unchanged. Clear rho to recompute from R.mat.
 projectRoot=fileparts(mfilename('fullpath'));
 addpath(projectRoot); setupPaths;
-windowSize=[11 11]; % used only if rho is not already present
+windowSize=[23 23]; % used only if rho is not already present
 numBins=256;
 graphOptions=struct('MaxGap',100,'MinComponentDiameter',25, ...
     'MaxVertexDensity',2);
