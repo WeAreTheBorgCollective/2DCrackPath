@@ -62,9 +62,19 @@ Damage=createDamageField(LS,measurementMask,parameters,[], ...
 
 ## Level-set updates
 
-`updateCrackLevelSets` analytically differentiates the discrete energy with respect to d, then pulls that derivative back to polyline nodes through the nearest-segment projection and damage profile. Interior nodes move normally; both endpoint nodes can move in two dimensions. The default maximum movement is 0.25 px. Backtracking rejects non-decreasing energy, collapsed segments, self-intersections, or a path leaving the ROI. Both endpoints and all three distance fields are reconstructed after every accepted move.
+The default driver now uses `updateCrackLevelSetsRethore`. At each crack vertex it searches along the local normal for the maximum **absolute original-image residual** `|f(X)-g(X+uPF)|`, with the latest accepted PF displacement. The speed is the signed crack distance of that maximum (Rethore Eqs. 35-36). `advectLevelSetGodunov` integrates `phi_t+F|grad(phi)|=0` with the one-sided Godunov derivatives of Eqs. 26-32 and CFL substeps.
 
-This geometric update/reinitialization is an explicit adaptation of the level-set representation; it does **not** implement Rethore's Godunov time integrator or residual-maximum velocity rule. Reconstructing signed distances keeps the geometry and the three fields synchronized. Acceptance guarantees energy decrease only for each accepted discrete step, not a global optimum or convergence after the default three outer iterations.
+Defaults are an 8 px search radius, 0.25 px sampling, 5 px tangent span, 3 px arclength velocity smoothing, and unit virtual duration. Searches stop at ROI holes. The finite connected zero contour is extracted between the predicted endpoint positions, and all three distance fields and damage are rebuilt. Exact curve-distance reconstruction replaces the paper's PDE reinitialization (Eq. 33); smoothing, finite search, and acceptance safeguards are implementation adaptations. Endpoint motion follows the normal search; there is no separate tangential crack-growth rule.
+
+Backtracking requires an increased mean absolute residual sampled uniformly along the path and rejects self-intersections, ROI exits, and excessive contour excursions. Total PF energy is recorded but does **not** veto geometry motion: residual maximization and phase-field energy minimization are different objectives. The old `updateCrackLevelSets` energy-gradient method remains available for comparison.
+
+To refine an existing final PF solution, run:
+
+```matlab
+refineCrackPathRethore
+```
+
+This resumes `Damage/PhaseFieldResult.mat` and `Damage/Damage.mat`, recomputes residuals using original images before each shape update, and performs three alternating shape/DIC steps. Existing outputs are backed up under `Damage/BeforeRethore_<timestamp>`. It saves updated damage/results, `Damage/RethoreComparison.mat`, and `Damage/RethorePathComparison.png`, then refreshes the initial-versus-final raw residual/displacement comparisons and `InitialValues/DisplacementInitPF.mat`. The crack extractor is unchanged. Adjust `options` and `iterations` in this script to control the refinement.
 
 ## Existing correlate integration: approximation and acceptance
 
@@ -83,9 +93,11 @@ The masked images also change the gradients used by correlate. Thus this is the 
 
 Tests cover straight/curved subpixel distance geometry, tip orthogonality, damage bounds and outside-domain preservation, MAT serialization, finite-difference checks of both damage and shape energy derivatives, energy-decreasing geometry motion, endpoint-field reconstruction, unchanged outside image pixels, and invalid domains/paths.
 
-The full workflow was also run with the installed Correli on this repository's images and mesh. It generated all requested MAT files. Three accepted geometry steps reduced total energy from 248.965917 to 247.641660. All three image-masked displacement proposals were rejected by the actual-energy check, so the regular-DIC displacement remained unchanged.
+The previous energy-gradient workflow was also run with the installed Correli on this repository's images and mesh. It generated all requested MAT files. Three accepted geometry steps reduced total energy from 248.965917 to 247.641660. All three image-masked displacement proposals were rejected by the actual-energy check, so the regular-DIC displacement remained unchanged.
 
 ```matlab
 results=runtests('tests');
 assertSuccess(results);
 ```
+
+The residual-driven refinement was run from the previous final PF solution: all three shape updates were accepted, increasing mean raw |R| along the curve from 501.356 to 631.393, 631.670, and 647.325 gray levels. PF energy changed from 247.642 to 255.080; this geometry objective does not minimize that energy. All three displacement proposals were rejected, so displacement and full-image raw residual are unchanged. All 23 MATLAB tests passed, including propagation sign, negative residual magnitude, flat-profile stationarity, and ROI-hole isolation. Higher residual alignment is not independent validation of the physical crack location.
