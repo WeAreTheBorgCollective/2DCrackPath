@@ -1,8 +1,9 @@
 %% Automatic residual thresholding, thinning and Euclidean crack path
 % Run after screenResidualImage to reuse rho, or standalone to compute it.
 % An existing rho is used unchanged. Clear rho to recompute from R.mat.
-projectRoot=fileparts(mfilename('fullpath'));
-addpath(projectRoot); setupPaths;
+projectRoot = fileparts(mfilename('fullpath'));
+addpath(projectRoot);
+setupPaths;
 windowSize=[23 23]; % used only if rho is not already present
 numBins=256;
 graphOptions=struct('MaxGap',100,'MinComponentDiameter',25, ...
@@ -31,33 +32,75 @@ end
 figure('Color','w','Position',[50 50 1500 850], ...
     'Name','Automatic residual crack path');
 tiledlayout(2,3,'TileSpacing','compact');
-ax=nexttile; im=imagesc(ax,rho); im.AlphaData=isfinite(rho);
-axis(ax,'image'); colorbar(ax); title(ax,'Screened mean |R| [GL]');
-ax=nexttile; plot(ax,thresholdInfo.levels,thresholdInfo.probability);
-xline(ax,automaticThreshold,'r--'); grid(ax,'on');
-xlabel(ax,'Mean |R| [GL]'); ylabel(ax,'Probability'); title(ax,'Valley-emphasis threshold');
-ax=nexttile; imagesc(ax,binaryCrack); axis(ax,'image'); title(ax,'Binary crack mask');
-ax=nexttile; imagesc(ax,crackSkeleton); axis(ax,'image'); title(ax,'One-pixel-wide skeleton');
+ax=nexttile;
+im=imagesc(ax,rho);
+im.AlphaData=isfinite(rho);
+axis(ax,'image');
+colorbar(ax);
+title(ax,'Screened mean |R| [GL]');
+ax=nexttile;
+plot(ax,thresholdInfo.levels,thresholdInfo.probability);
+xline(ax,automaticThreshold,'r--');
+grid(ax,'on');
+xlabel(ax,'Mean |R| [GL]');
+ylabel(ax,'Probability');
+title(ax,'Valley-emphasis threshold');
+ax=nexttile;
+imagesc(ax,binaryCrack);
+axis(ax,'image');
+title(ax,'Binary crack mask');
+ax=nexttile;
+imagesc(ax,crackSkeleton);
+axis(ax,'image');
+title(ax,'One-pixel-wide skeleton');
 ax=nexttile;
 if numnodes(crackGraph)>0
     p=plot(ax,crackGraph,'XData',crackGraph.Nodes.X,'YData',crackGraph.Nodes.Y, ...
         'Marker','none','NodeLabel',{},'EdgeColor',[0.2 0.5 0.8]);
     bridgeIDs=find(crackGraph.Edges.IsBridge);
-    if ~isempty(bridgeIDs), highlight(p,'Edges',bridgeIDs,'EdgeColor','r','LineWidth',2); end
+    if ~isempty(bridgeIDs)
+        highlight(p,'Edges',bridgeIDs,'EdgeColor','r','LineWidth',2);
+    end
 end
-axis(ax,'image'); set(ax,'YDir','reverse'); title(ax,'Retained graph (red = inferred gaps)');
-ax=nexttile; im=imagesc(ax,rho); im.AlphaData=isfinite(rho);
-axis(ax,'image'); hold(ax,'on');
-if ~isempty(crackPathXY)
-    plot(ax,crackPathXY(:,1),crackPathXY(:,2),'r-','LineWidth',1.5);
+axis(ax,'image');
+set(ax,'YDir','reverse');
+title(ax,'Retained graph (red = inferred gaps)');
+%% Map the extracted reference-grid path to the original deformed image
+if size(crackPathXY,1)<2
+    error('extractResidualCrackPath:Empty','No usable crack path; initialization was not saved.');
 end
-title(ax,sprintf('Principal path: %.1f px',graphInfo.pathLength));
+initial = load(fullfile(projectRoot,'InitialValues','DisplacementInit.mat'));
+g = imread(fullfile(projectRoot,'Slike','deformed.tif'));
+if ~isequal(size(rho),size(g),initial.imageSize)
+    error('extractResidualCrackPath:ImageSize','Screening, displacement and image sizes must match.');
+end
+crackPathReferenceXY = crackPathXY;
+ax = nexttile;
+[crackPathDeformedXY,crackPathDisplacementXY] = plotCrackOnDeformed( ...
+    ax,g,crackPathReferenceXY,initial.Mesh,initial.a, ...
+    'Mapped crack on original deformed image');
+
 %% Persist the ordered initial crack path for level sets and phase-field DIC
 if size(crackPathXY,1)<2
     error('extractResidualCrackPath:Empty','No usable crack path; initialization was not saved.');
 end
 crackFolder=fullfile(projectRoot,'CrackPaths');
-if ~isfolder(crackFolder), mkdir(crackFolder); end
+if ~isfolder(crackFolder)
+    mkdir(crackFolder);
+end
 imageSize=size(rho);
+coordinateFrame = 'reference';
+mappingConvention = 'x = X + u(X)';
+mappingDisplacementSource = 'InitialValues/DisplacementInit.mat';
 save(fullfile(crackFolder,'CrackPathInit.mat'), ...
-    'crackPathXY','crackPathMask','imageSize','graphInfo','-v7');
+    'crackPathXY','crackPathReferenceXY','crackPathDeformedXY', ...
+    'crackPathDisplacementXY','coordinateFrame','mappingConvention', ...
+    'mappingDisplacementSource','crackPathMask','imageSize','graphInfo','-v7');
+exportgraphics(gcf,fullfile(crackFolder,'CrackExtraction.png'),'Resolution',160);
+
+% A larger standalone overlay makes pixel-level alignment easier to inspect.
+overlayFigure = figure('Color','w','Position',[50 50 1400 400]);
+ax = axes(overlayFigure);
+plotCrackOnDeformed(ax,g,crackPathReferenceXY,initial.Mesh,initial.a, ...
+    'Extracted crack mapped by initial displacement onto original deformed image');
+exportgraphics(overlayFigure,fullfile(crackFolder,'CrackOnDeformed.png'),'Resolution',160);

@@ -1,4 +1,4 @@
-function saveLevelSetStep(folder,step,levelSets,Damage,a,R,measurementMask,options,stage)
+function saveLevelSetStep(folder,step,levelSets,Damage,a,R,measurementMask,options,stage,g,Mesh)
 %SAVELEVELSETSTEP Save reproducible geometry and its original-image residual.
 % R belongs to the accepted a at this step, with no image damage weighting.
 screenInput = double(R);
@@ -6,12 +6,19 @@ screenInput(~measurementMask) = NaN;
 [screenedResidual,~,~] = screenResidual2D( ...
     screenInput,options.screeningWindowSize,0,0,0);
 filename = fullfile(folder,sprintf('Step_%02d',step));
+crackPathReferenceXY = levelSets.pathXY;
+[crackPathDeformedXY,crackPathDisplacementXY] = mapCrackPathToDeformed( ...
+    crackPathReferenceXY,Mesh,a);
+coordinateFrame = 'reference';
+mappingConvention = 'x = X + u(X)';
 save([filename '.mat'],'step','stage','levelSets','Damage','a','R', ...
-    'screenedResidual','measurementMask','options','-v7');
+    'screenedResidual','measurementMask','options', ...
+    'crackPathReferenceXY','crackPathDeformedXY','crackPathDisplacementXY', ...
+    'coordinateFrame','mappingConvention','-v7');
 
-fig = figure('Color','w','Visible','off','Position',[50 50 1300 650]);
+fig = figure('Color','w','Visible','off','Position',[50 50 1300 800]);
 cleanup = onCleanup(@()close(fig)); %#ok<NASGU>
-tiledlayout(fig,2,2,'TileSpacing','compact');
+tiledlayout(fig,3,2,'TileSpacing','compact');
 path = levelSets.pathXY;
 bounds = [min(path,[],1)-20; max(path,[],1)+20];
 fields = {abs(double(R)),screenedResidual,levelSets.phi,Damage};
@@ -36,6 +43,9 @@ for panel = 1:4
     xlabel(ax,'x [px]');
     ylabel(ax,'y [px]');
 end
+ax = nexttile([1 2]);
+plotCrackOnDeformed(ax,g,crackPathReferenceXY,Mesh,a, ...
+    'Crack mapped by this step displacement onto original deformed image');
 sgtitle(fig,sprintf('Step %d: %s',step,stage));
 exportgraphics(fig,[filename '.png'],'Resolution',140);
 end

@@ -58,7 +58,7 @@ for previousFile = {'Damage.mat','PhaseFieldResult.mat'}
     end
 end
 saveLevelSetStep(evolutionFolder,0,levelSets,Damage,a,R, ...
-    measurementMask,levelSetOptions,'Initial conventional-DIC displacement');
+    measurementMask,levelSetOptions,'Initial conventional-DIC displacement',g,Mesh);
 
 energyHistory = phaseFieldEnergy2D(Damage,R,measurementMask,parameters);
 updateHistory = cell(parameters.outerIterations,2);
@@ -78,7 +78,7 @@ for iteration = 1:parameters.outerIterations
         Damage,R,measurementMask,parameters); %#ok<SAGROW>
 
     saveLevelSetStep(evolutionFolder,iteration,levelSets,Damage,a,R, ...
-        measurementMask,levelSetOptions,'After shape update; residual from preceding PF solve');
+        measurementMask,levelSetOptions,'After shape update; residual from preceding PF solve',g,Mesh);
     fprintf('Step %d: DIC accepted=%d; shape accepted=%d; screen %.5f -> %.5f GL\n', ...
         iteration,dicInfo.accepted,shapeInfo.accepted, ...
         shapeInfo.meanScreeningBefore,shapeInfo.meanScreeningAfter);
@@ -90,7 +90,7 @@ end
 R = evaluateUndamagedResidual(kernel,f,g,a,measurementMask);
 energyHistory(end+1,1) = phaseFieldEnergy2D(Damage,R,measurementMask,parameters);
 saveLevelSetStep(evolutionFolder,parameters.outerIterations+1, ...
-    levelSets,Damage,a,R,measurementMask,levelSetOptions,'Final PF solve');
+    levelSets,Damage,a,R,measurementMask,levelSetOptions,'Final PF solve',g,Mesh);
 
 save(fullfile(damageFolder,'Damage.mat'), ...
     'Damage','measurementMask','levelSets','initialLevelSets','parameters', ...
