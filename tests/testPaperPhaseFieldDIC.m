@@ -134,3 +134,23 @@ H = -0.5*ones(nnz(model.mask),1);
 verifyTrue(tc,info.converged);
 verifyEqual(tc,d,zeros(size(H)),'AbsTol',1e-6);
 end
+
+
+function testGaussianInitializationAndRawResidual(tc)
+p = paperPFParameters;
+verifyEqual(tc,p.displacementSmoothing,[2 0]);
+[x,y] = meshgrid(1:48);
+f = .5+.2*sin(.3*x+.2*y)+.1*cos(.17*x-.31*y);
+g = circshift(f,[0 1]);
+mask = false(size(f));
+mask(7:42,7:42) = true;
+model = paperPFModel(mask,8);
+U = zeros(size(model.nodes));
+d = zeros(numel(model.ids),1);
+[U,~,r,info] = paperPFDisplacementSolve(model,f,g,U,d,p,1);
+verifyEqual(tc,info.smoothingScales,[2 0]);
+raw = g(model.ids)-paperPFWarp(f,model.x,model.y,model.N*U);
+verifyEqual(tc,r,raw,'AbsTol',1e-12);
+[~,~,~,info] = paperPFDisplacementSolve(model,f,g,U,d,p,2);
+verifyEqual(tc,info.smoothingScales,0);
+end

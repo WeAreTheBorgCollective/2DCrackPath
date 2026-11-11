@@ -6,6 +6,9 @@ projectRoot = fileparts(mfilename('fullpath'));
 addpath(projectRoot);
 setupPaths;
 p = paperPFParameters;
+% First displacement solve: imgaussfilt(f,2), imgaussfilt(g,2), then originals.
+% Filtering is registration continuation on the same grid, not downsampling.
+% Damage and final residual use the unfiltered images after this refinement.
 % Optional explicit calibration overrides, saved with every result.
 if exist('paperParameterOverrides','var')
     overrideNames = fieldnames(paperParameterOverrides);
@@ -72,6 +75,7 @@ runFolder = fullfile(outputRoot,['Run_' char(datetime('now','Format','yyyyMMdd_H
 mkdir(runFolder);
 save(fullfile(runFolder,'Model.mat'),'model','p','grayMin','grayRange','plotBounds','-v7.3');
 savePaperPFIteration(runFolder,0,model,U,d,r,Phi,history,p,gOriginal,plotBounds);
+fprintf('Gaussian displacement initialization scales [px]: %s\n',mat2str(p.displacementSmoothing));
 firstDisplacement = [];
 for iteration = 1:p.maxIterations
     % Displacement increment with FIXED damage and genuine quadrature weights.
