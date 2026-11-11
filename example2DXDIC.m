@@ -86,6 +86,6 @@ e = statXF.prep.enrichedNodes;
 t = statXF.prep.tipSupportNodes;
 plot(Mesh.pos(e,1),Mesh.pos(e,2),'go','MarkerFaceColor','g');
 plot(Mesh.pos(t,1),Mesh.pos(t,2),'ms');
-title('Reference mesh: enriched nodes (green), excluded tip supports (magenta)');
+title('Reference mesh: enriched nodes (green), tip-element nodes (magenta; may also be enriched)');
 set(findall(fig,'Type','Axes'),'Toolbar',[]);
 exportgraphics(fig,fullfile(out,'Enrichment.png'));
