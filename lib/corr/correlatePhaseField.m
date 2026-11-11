@@ -19,10 +19,13 @@ newEnergy=Inf;
 if all(isfinite(rawR(mask))) && all(isfinite(candidate(:)))
     newEnergy=phaseFieldEnergy2D(Damage,rawR,mask,p);
 end
-a=initialA; R=initialR;
+a=initialA;
+R=initialR;
 info=struct('accepted',newEnergy<=oldEnergy,'energyBefore',oldEnergy, ...
     'candidateEnergy',newEnergy,'energyAfter',oldEnergy,'solverStatus',stat.conv_stat);
 if info.accepted
-    a=candidate; R=rawR; info.energyAfter=newEnergy;
+    a=candidate;
+    R=rawR;
+    info.energyAfter=newEnergy;
 end
 end
