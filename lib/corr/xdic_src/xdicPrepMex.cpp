@@ -32,7 +32,7 @@ void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
             require(!intersect(crack[i-1],crack[i],crack[j-1],crack[j]),"Self-intersecting crack paths are unsupported.");
     std::vector<std::array<mwIndex,3>> triangles(ne);
     std::vector<bool> candidate(nn,false),tip(nn,false),cut(ne,false);
-    std::vector<double> cutList,tipList,nodeH(nn,0);
+    std::vector<double> cutList,fullList,tipList,nodeH(nn,0);
     for(mwSize i=0;i<nn;++i) if(nc) nodeH[i]=heaviside(nodes[i],crack);
     for(mwSize e=0;e<ne;++e) {
         std::array<Point,3> t;
@@ -50,9 +50,11 @@ void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
                 if(segmentTouchesTriangle(crack[k-1],crack[k],t)) { cut[e]=true; break; }
             for(int j=0;j<3;++j) {
                 if(containsTip) tip[triangles[e][j]]=true;
-                if(cut[e]) candidate[triangles[e][j]]=true;
+                // Shared nodes stay enriched when incident to a fully cut element.
+                if(cut[e] && !containsTip) candidate[triangles[e][j]]=true;
             }
             if(cut[e]) cutList.push_back(double(e+1));
+            if(cut[e] && !containsTip) fullList.push_back(double(e+1));
         }
     }
     // Unique ownership of shared-edge pixels; no duplicate quadrature.
@@ -92,7 +94,7 @@ void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
     std::vector<double> enriched,excluded,geometric,index(nn,0);
     for(mwSize i=0;i<nn;++i) {
         if(tip[i]) tipList.push_back(double(i+1));
-        if(candidate[i] && !tip[i]) {
+        if(candidate[i]) {
             geometric.push_back(double(i+1));
             if(plus[i]>1e-10 && minus[i]>1e-10) {
                 enriched.push_back(double(i+1));
@@ -118,8 +120,8 @@ void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
     }
     const char* names[]={"basis","pixelIndex","elementIndex","shape","imageSize","nNodes",
         "enrichedNodes","tipSupportNodes","cutElements","fullyCutCandidates","unresolvedNodes",
-        "pixelHeaviside","nodeHeaviside","crackPathXY","version"};
-    plhs[0]=mxCreateStructMatrix(1,1,15,names);
+        "pixelHeaviside","nodeHeaviside","crackPathXY","version","fullyCutElements"};
+    plhs[0]=mxCreateStructMatrix(1,1,16,names);
     set(plhs[0],"basis",sparse(count,nb,entries));
     set(plhs[0],"pixelIndex",column(pixel));
     set(plhs[0],"elementIndex",column(element));
@@ -129,6 +131,7 @@ void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
     set(plhs[0],"enrichedNodes",column(enriched));
     set(plhs[0],"tipSupportNodes",column(tipList));
     set(plhs[0],"cutElements",column(cutList));
+    set(plhs[0],"fullyCutElements",column(fullList));
     set(plhs[0],"fullyCutCandidates",column(geometric));
     set(plhs[0],"unresolvedNodes",column(excluded));
     set(plhs[0],"pixelHeaviside",column(pixelH));
@@ -140,3 +143,4 @@ void mexFunction(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
     try { prepare(nlhs,plhs,nrhs,prhs); }
     catch(const std::exception& e) { mexErrMsgIdAndTxt("xdic:Input","%s",e.what()); }
 }
+

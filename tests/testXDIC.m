@@ -18,7 +18,12 @@ qr = prepareXDIC(Mesh,[80 80],flipud(crack));
 nn = size(Mesh.pos,1);
 assert(norm(q.basis(:,nn+1:end)+qr.basis(:,nn+1:end),'fro')<1e-12);
 qt = prepareXDIC(Mesh,[80 80],[35.5 20;35.5 60]);
-assert(isempty(intersect(qt.enrichedNodes,qt.tipSupportNodes)));
+shared = intersect(qt.enrichedNodes,qt.tipSupportNodes);
+assert(~isempty(shared));
+fullNodes = unique(Mesh.con(qt.fullyCutElements,2:4));
+assert(all(ismember(qt.enrichedNodes,fullNodes)));
+tiny = prepareXDIC(Mesh,[80 80],[34 34;35 34.5]);
+assert(isempty(tiny.enrichedNodes));
 [X,Y] = meshgrid(1:80);
 texture = @(x,y) 100+25*sin(.23*x+.13*y)+20*cos(.17*x-.27*y)+15*sin(.37*y);
 f = texture(X,Y);
@@ -57,3 +62,5 @@ if exist('kernel_corr','file')
     assert(herror<1e-5 && berror<1e-5 && rerror<1e-4);
 end
 end
+
+
