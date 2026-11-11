@@ -161,3 +161,30 @@ proposals were rejected, so the final displacement and original-image residual
 were unchanged (RMSE 122.64 GL). Five MAT/PNG snapshots were generated.
 All 29 MATLAB tests passed. These results expose the remaining image-masking
 surrogate limitation rather than demonstrating a converged weighted PF solve.
+
+## Crack coordinates and deformed-image overlays
+
+The residual is evaluated at reference pixels X:
+`R(X)=f(X)-g(X+u(X))`. Extracting a crack from this image therefore already
+gives reference coordinates. Moving these coordinates a second time for the
+damage/level-set computation would mix frames.
+
+For display on the original deformed image, map every crack node forward:
+`x=X+u(X)`. The displacement is interpolated using barycentric shape functions
+of the actual Correli T3 connectivity, preserving mesh holes; unsupported points
+raise an error rather than being extrapolated. Subtracting u at X is not the
+appropriate mapping for this residual convention.
+
+`CrackPathInit.mat` now stores `crackPathReferenceXY`,
+`crackPathDeformedXY`, and `crackPathDisplacementXY`, together with frame and
+mapping metadata. The compatible `crackPathXY` field and mask remain in the
+reference frame for PF-DIC. Extraction uses
+`InitialValues/DisplacementInit.mat`, the displacement associated with the
+initial residual, and saves `CrackPaths/CrackOnDeformed.png` and
+`CrackPaths/CrackExtraction.png`.
+
+Each evolution snapshot also stores both crack coordinate sets and overlays
+the mapped path on the original grayscale deformed image. The mapping uses
+that snapshot's accepted displacement a, rather than always using the initial
+or final field. The raw-residual, screening, level-set and damage panels remain
+in reference coordinates. No damage is applied to the displayed deformed image.
