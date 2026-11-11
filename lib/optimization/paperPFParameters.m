@@ -20,7 +20,8 @@ p.damping = 1e-8;
 p.maxDisplacementStep = 2;
 p.damageThreshold = 0.5;
 % Registration safeguard beyond the paper's illustrative one-step GN.
-p.displacementSmoothing = [4 2 1 0];
+% Same Gaussian initialization then original-image refinement as example2Dscreening.
+p.displacementSmoothing = [2 0];
 p.innerMaxIterations = 12;
 p.innerTolerance = 1e-3;
 p.invertImages = true; % Paper assumes bright crack/background; our cracks are dark.
