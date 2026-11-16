@@ -1,9 +1,10 @@
 # Independent paper-based phase-field DIC
 
 Run `runPaperPhaseFieldDIC` after configuring the project paths. It reads
-the original images and only the bounding rectangle of the previous measurement
-ROI. No extracted crack, damage profile, residual screening map, or prior
-displacement initializes the solver. The old level-set experiment remains
+the original images and the bounding rectangle of the previous measurement
+ROI. Damage is initialized from the deformed-frame path saved by
+`extractResidualCrackPath`; displacement starts at zero. Gaussian image
+filtering is disabled. See [initialization details](../PaperPFInitialization.md). The old level-set experiment remains
 separate in `runPhaseFieldDIC`.
 
 Source: Zhu and Lu, *Phase-field digital image correlation for integrated
@@ -19,7 +20,7 @@ It is NOT interchangeable with the older reference-grid Correli a(X).
 Damage, its contours and skeleton are already in deformed-image coordinates
 and are overlaid directly on the original grayscale g.
 
-Initialize u=0 and d=0. For each outer iteration:
+Initialize u=0 and d=exp(-sqrt(mu)*distanceToExtractedCrack/lc). For each outer iteration:
 
 1. Hold d fixed and solve weighted image registration. At each Gauss-Newton
    step form `J=[diag(f_x(x-u))*N, diag(f_y(x-u))*N]`,
@@ -68,23 +69,14 @@ instead solves the discrete quadratic and records its projected KKT residual.
 Bounds, solver tolerances, damping and line searches are explicit numerical
 choices because the paper does not specify their implementation.
 
-For these images, a direct one-step zero-start GN run began fitting speckle
-mismatches with diffuse damage. To improve the registration capture range,
-the first fixed-damage displacement subproblem defaults to Gaussian scales
-[4 2 1 0] px, always ending on the original normalized images, with up to
-12 inner GN iterations per scale. Subsequent outer steps use only original
-images. This coarse-to-fine inner solve is an extension beyond the illustrative
-one-step algorithm, not a different damage law. The final original-image
-weighted objective must decrease. To run the direct version:
-
-```matlab
-p.displacementSmoothing = 0;
-p.innerMaxIterations = 1;
-```
-
-Set these immediately after `p=paperPFParameters` in the script. Initialization
-remains zero in both versions. Defaults also include a 2 px GN step cap and
-small diagonal damping; every accepted step records its objective change.
+The current entry point uses original images at every displacement step
+(displacementSmoothing=0), with up to 12 inner GN iterations. The first
+weighted solve uses the extracted-crack damage seed; later damage fields
+are independently solved, not prescribed by that path.
+Defaults include a 2 px GN step cap and small diagonal damping, with
+decreasing weighted registration objective. The generic displacement
+helper still supports an explicitly supplied Gaussian schedule, but
+runPaperPhaseFieldDIC enforces zero smoothing as requested.
 
 ## Parameters and calibration
 
@@ -106,7 +98,8 @@ No ground-truth accuracy percentage is claimed.
 
 Outputs go to `PaperPhaseField/Run_<timestamp>`:
 - `Model.mat`: both mesh operators, normalization and plot bounds.
-- `Iteration_00.mat/png`: zero-initialized state.
+- `Iteration_00.mat/png`: extracted-crack damage seed and zero displacement.
+- `InitialDamage.mat`: initial damage array and source-path/profile metadata.
 - `Iteration_XX.mat/png`: every completed displacement/damage iteration.
 - `Damage.mat`: final state, also copied to `PaperPhaseField/Damage.mat`.
 - `Convergence.mat`: actual status and full iteration history.

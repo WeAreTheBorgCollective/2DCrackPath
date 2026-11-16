@@ -138,7 +138,8 @@ end
 
 function testGaussianInitializationAndRawResidual(tc)
 p = paperPFParameters;
-verifyEqual(tc,p.displacementSmoothing,[2 0]);
+verifyEqual(tc,p.displacementSmoothing,0);
+p.displacementSmoothing = [2 0]; % Explicit opt-in tests the general solver.
 [x,y] = meshgrid(1:48);
 f = .5+.2*sin(.3*x+.2*y)+.1*cos(.17*x-.31*y);
 g = circshift(f,[0 1]);
@@ -153,4 +154,35 @@ raw = g(model.ids)-paperPFWarp(f,model.x,model.y,model.N*U);
 verifyEqual(tc,r,raw,'AbsTol',1e-12);
 [~,~,~,info] = paperPFDisplacementSolve(model,f,g,U,d,p,2);
 verifyEqual(tc,info.smoothingScales,0);
+end
+
+function testExtractedCrackDamageSeed(tc)
+model = paperPFModel(true(31,41),5);
+p = paperPFParameters;
+data = struct('crackPathDeformedXY',[8 16;34 16], ...
+    'crackPathReferenceXY',[8 9;34 9],'imageSize',[31 41]);
+[d,info] = paperPFInitialDamage(model,data,p);
+expectedDistance = crackProjection2D(data.crackPathDeformedXY,[model.x model.y]);
+verifyEqual(tc,d,exp(-sqrt(p.mu)*expectedDistance/p.lc),'AbsTol',1e-12);
+verifyEqual(tc,d(model.y==16 & model.x>=8 & model.x<=34), ...
+    ones(nnz(model.y==16 & model.x>=8 & model.x<=34),1),'AbsTol',1e-12);
+verifyTrue(tc,all(d>=0 & d<=1));
+verifyEqual(tc,info.coordinateFrame,'deformed');
+verifyError(tc,@()paperPFInitialDamage(model,rmfield(data,'crackPathDeformedXY'),p),'paperPF:CrackFrame');
+data.imageSize = [32 41];
+verifyError(tc,@()paperPFInitialDamage(model,data,p),'paperPF:CrackSize');
+end
+
+function testRawImageDefault(tc)
+p = paperPFParameters;
+verifyEqual(tc,p.displacementSmoothing,0);
+[x,y] = meshgrid(1:40);
+f = .5+.2*sin(.2*x+.3*y);
+mask = false(size(f));
+mask(6:35,6:35) = true;
+model = paperPFModel(mask,5);
+[~,~,r,info] = paperPFDisplacementSolve(model,f,f,zeros(size(model.nodes)), ...
+    .2*ones(numel(model.ids),1),p,1);
+verifyEqual(tc,info.smoothingScales,0);
+verifyEqual(tc,r,zeros(size(r)),'AbsTol',1e-12);
 end

@@ -1,14 +1,12 @@
 %% Zhu and Lu: independent damage PDE and weighted DIC, Section 2.7
 % This is separate from the older prescribed-crack/level-set experiments.
-% No extracted crack or displacement is used to initialize the algorithm.
+% Initialize damage from extractResidualCrackPath; displacement starts at zero.
 % Coordinates match the paper: g(x)-f(x-u(x)), on the DEFORMED image grid.
 projectRoot = fileparts(mfilename('fullpath'));
 addpath(projectRoot);
 setupPaths;
 p = paperPFParameters;
-% First displacement solve: imgaussfilt(f,2), imgaussfilt(g,2), then originals.
-% Filtering is registration continuation on the same grid, not downsampling.
-% Damage and final residual use the unfiltered images after this refinement.
+% Images are not Gaussian-filtered; use the original-image residual.
 % Optional explicit calibration overrides, saved with every result.
 if exist('paperParameterOverrides','var')
     overrideNames = fieldnames(paperParameterOverrides);
@@ -20,6 +18,8 @@ if exist('paperParameterOverrides','var')
         p.(name) = paperParameterOverrides.(name);
     end
 end
+% This entry point always uses raw images, including if stale overrides exist.
+p.displacementSmoothing = 0;
 % Calibrate the Table 3 values for your experiment before quantitative use.
 fOriginal = double(imread(fullfile(projectRoot,'Slike','reference.tif')));
 gOriginal = double(imread(fullfile(projectRoot,'Slike','deformed.tif')));
@@ -40,7 +40,7 @@ end
 
 %% Rectangular specimen ROI, not a crack mask
 % Reuse only the previous measurement rectangle to locate the specimen.
-% Do not reuse its crack exclusion, displacement, damage or extracted path.
+% Do not reuse the previous mesh exclusion or displacement coefficients.
 initialGeometry = load(fullfile(projectRoot,'InitialValues','DisplacementInit.mat'), ...
     'measurementMask');
 [roiY,roiX] = find(initialGeometry.measurementMask);
@@ -48,20 +48,15 @@ measurementMask = false(size(f));
 measurementMask(min(roiY):max(roiY),min(roiX):max(roiX)) = true;
 model = paperPFModel(measurementMask,p.displacementSpacing);
 plotBounds = [min(roiX) max(roiX) min(roiY) max(roiY)];
-% Optional plot-only zoom. It never enters either numerical subproblem.
+%% Extracted crack initializes damage on the deformed grid
 crackFile = fullfile(projectRoot,'CrackPaths','CrackPathInit.mat');
-if isfile(crackFile)
-    displayCrack = load(crackFile,'crackPathDeformedXY');
-    if isfield(displayCrack,'crackPathDeformedXY') && ~isempty(displayCrack.crackPathDeformedXY)
-        points = displayCrack.crackPathDeformedXY;
-        plotBounds = [max(1,min(points(:,1))-20) min(size(f,2),max(points(:,1))+20) ...
-            max(1,min(points(:,2))-20) min(size(f,1),max(points(:,2))+20)];
-    end
-end
-
-%% Section 2.7 initialization: u0=0 and d0=0
+crackData = load(crackFile);
+[d,damageInitialization] = paperPFInitialDamage(model,crackData,p);
+points = damageInitialization.pathXY;
+plotBounds = [max(1,min(points(:,1))-20) min(size(f,2),max(points(:,1))+20) ...
+    max(1,min(points(:,2))-20) min(size(f,1),max(points(:,2))+20)];
+% Initial damage is free to change in subsequent independent PDE solves.
 U = zeros(size(model.nodes));
-d = zeros(numel(model.ids),1);
 r = g(model.ids)-f(model.ids);
 Phi = zeros(size(r));
 history = struct([]);
@@ -73,9 +68,13 @@ if ~isfolder(outputRoot)
 end
 runFolder = fullfile(outputRoot,['Run_' char(datetime('now','Format','yyyyMMdd_HHmmss_SSS'))]);
 mkdir(runFolder);
-save(fullfile(runFolder,'Model.mat'),'model','p','grayMin','grayRange','plotBounds','-v7.3');
+save(fullfile(runFolder,'Model.mat'),'model','p','grayMin','grayRange','plotBounds','damageInitialization','-v7.3');
+initialDamage = zeros(model.imageSize);
+initialDamage(model.ids) = d;
+save(fullfile(runFolder,'InitialDamage.mat'),'initialDamage', ...
+    'damageInitialization','measurementMask','p','-v7');
 savePaperPFIteration(runFolder,0,model,U,d,r,Phi,history,p,gOriginal,plotBounds);
-fprintf('Gaussian displacement initialization scales [px]: %s\n',mat2str(p.displacementSmoothing));
+fprintf('Extracted-crack damage initialization; original images, no Gaussian filtering.\n');
 firstDisplacement = [];
 for iteration = 1:p.maxIterations
     % Displacement increment with FIXED damage and genuine quadrature weights.
