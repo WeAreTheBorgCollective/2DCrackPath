@@ -8,8 +8,7 @@ if ~isequal(initial.Mesh.pos,final.Mesh.pos) || ...
         ~isequal(initial.Mesh.con,final.Mesh.con) || ~isequal(size(initial.a),size(final.a))
     error('comparePhaseFieldDIC:Mesh','Initial and final displacement meshes must match.');
 end
-f=single(imread(fullfile(projectRoot,'Slike','reference.tif')));
-g=single(imread(fullfile(projectRoot,'Slike','deformed.tif')));
+[f,g] = loadDICImages(projectRoot,initial);
 if ~isequal(size(f),size(g),initial.imageSize)
     error('comparePhaseFieldDIC:ImageSize','Image sizes must match initialization.');
 end
