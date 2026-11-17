@@ -2,7 +2,7 @@
 
 Run `example2Dscreening` for the default `composite100` case.
 Select `screeningCaseName = 'composite050'`, `'composite100'`,
-`'composite200'`, or `'original'` before running the script.
+`'composite200'`, `'windmill'`, or `'original'` before running the script.
 Edit `screeningCases.m` to add a case with an ordered image list and mesh.
 
 The uploaded filenames are composite00.bmp through composite11.bmp.
@@ -51,3 +51,23 @@ metadata passed regression checks. The original mesh and legacy image
 fallback also passed. The validation run used PublishLatest=false to retain
 the pre-existing active initialization. Generated results are local, not
 committed to the repository.
+
+## Windmill experiment (fifth case)
+
+Select `screeningCaseName = 'windmill'; example2Dscreening`.
+The ordered list uses Windmill/windimill_meso_spec_1_001.tif as the fixed
+reference, followed by acquisition IDs 050:50:950 and 960 (21 images,
+20 displacement solutions). Mesh/Mesh.mat is imported with zero offset.
+The spelling windimill matches the uploaded filenames.
+
+The existing solver, Gaussian initialization, previous-solution warm starts
+and plots are reused. Results go to Results/Screening/windmill/Run_*/Step_001
+through Step_020. Step_020 corresponds to acquisition 960; the image filenames
+saved in each MAT identify the acquisition explicitly. Normal runs update
+InitialValues/DisplacementInit.mat and Residual/R.mat at each step for the
+existing downstream workflows.
+
+Windmill validation (2026-11-17): all 20 timesteps converged in both solver
+stages. Previous-solution warm starts, image metadata, residual files and
+all per-step plots were verified. Validation used PublishLatest=false;
+the previously active initialization was preserved.
