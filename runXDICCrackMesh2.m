@@ -1,40 +1,41 @@
-% New-mesh example: regular DIC -> straight-crack XDIC -> level-set evolution.
+%% Post-process the last accepted geometry from runXDICCrackEvolution.
+% Historical filename retained. No new mesh, correlation or evolution is run.
 projectRoot = fileparts(mfilename('fullpath'));
 addpath(projectRoot);
 setupPaths;
-addpath(correli_pathdef);
-if exist('xdicPrepMex','file')~=3
-    buildXDICKernels;
+if ~exist('xdicEvolutionFolder','var')
+    xdicEvolutionFolder = fullfile(projectRoot,'XDIC','Evolution');
 end
-f = single(imread(fullfile(projectRoot,'Slike','reference.tif')));
-g = single(imread(fullfile(projectRoot,'Slike','deformed.tif')));
-run(fullfile(projectRoot,'Mesh','CrackMesh2.m'));
-meshTranslation = [size(f,2)/2,size(f,1)/2-90,0];
-Mesh.pos = Mesh.pos+meshTranslation;
-Mesh.MIN = min(Mesh.pos);
-Mesh.MAX = max(Mesh.pos);
-source = load(fullfile(projectRoot,'CrackPaths','CrackStraight.mat'));
-path = double(source.crackPathReferenceXY);
-tri = triangulation(Mesh.con(:,2:4),Mesh.pos(:,1:2));
-assert(all(isfinite(pointLocation(tri,path))),'Straight crack must lie inside CrackMesh2.');
-outputRoot = fullfile(projectRoot,'XDIC','CrackMesh2Straight');
-if ~isfolder(outputRoot)
-    mkdir(outputRoot);
+sourceFile = fullfile(xdicEvolutionFolder,'Evolution.mat');
+savedEvolution = load(sourceFile,'result');
+result = savedEvolution.result;
+[U,crackPathReferenceXY] = evaluateXDICDisplacement(result);
+ux = U(:,:,1);
+uy = U(:,:,2);
+magnitude = hypot(ux,uy);
+coordinateFrame = 'reference';
+save(fullfile(xdicEvolutionFolder,'FinalDisplacement.mat'), ...
+    'U','ux','uy','magnitude','crackPathReferenceXY','coordinateFrame','sourceFile','-v7.3');
+fig = figure('Color','w','Position',[40 40 1500 600], ...
+    'Name','Final XDIC displacement and crack geometry');
+tiledlayout(fig,1,3,'TileSpacing','compact');
+fields = {ux,uy,magnitude};
+titles = {'Horizontal displacement [px]','Vertical displacement [px]', ...
+    'Displacement magnitude [px]'};
+for component = 1:3
+    ax = nexttile;
+    h = imagesc(ax,fields{component});
+    h.AlphaData = isfinite(fields{component});
+    axis(ax,'image');
+    colormap(ax,turbo);
+    colorbar(ax);
+    hold(ax,'on');
+    plot(ax,crackPathReferenceXY(:,1),crackPathReferenceXY(:,2), ...
+        'k-','LineWidth',1.5);
+    xlabel(ax,'Reference x [px]');
+    ylabel(ax,'Reference y [px]');
+    title(ax,titles{component});
 end
-runFolder = fullfile(outputRoot,['Run_' char(datetime('now','Format','yyyyMMdd_HHmmss_SSS'))]);
-mkdir(runFolder);
-% Fresh coefficients on the new mesh; never reuse another mesh's nodal vector.
-a = zeros(size(Mesh.pos));
-a = correlate(imgaussfilt(f,2),imgaussfilt(g,2),Mesh,a, ...
-    'plot_freq',0,'max_iter',500,'conv_limit',1e-6);
-[aRegular,~,RRegular] = correlate(f,g,Mesh,a, ...
-    'plot_freq',0,'max_iter',500,'conv_limit',1e-6);
-save(fullfile(runFolder,'Inputs.mat'),'Mesh','meshTranslation','path', ...
-    'aRegular','RRegular','-v7.3');
-options = struct('iterations',12);
-options.levelSet = struct('screeningWindowSize',[5 5], ...
-    'gradientGain',0.1,'maxNormalStep',1,'smoothLength',5);
-result = evolveXDIC(f,g,Mesh,path,aRegular,runFolder,options);
-documentXDICRun(runFolder,f,g,Mesh,RRegular,result);
-save(fullfile(outputRoot,'LatestRun.mat'),'runFolder');
-fprintf('CrackMesh2 run: %s\nStatus: %s\n',runFolder,result.status);
+sgtitle(fig,'Final accepted crack (black); enriched displacement on the reference grid');
+exportgraphics(fig,fullfile(xdicEvolutionFolder,'FinalDisplacement.png'),'Resolution',160);
+fprintf('Reconstructed displacement from %s\n',sourceFile);
