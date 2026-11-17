@@ -59,6 +59,8 @@ for iteration = 1:o.iterations
         end
         lsOptions.duration = lsOptions.duration/2^backtrack;
         [candidate,info] = updateXDICLevelSets(LS,R,fixedMask,lsOptions);
+        info.proposalAccepted = info.accepted;
+        info.proposalReason = info.reason;
         info.stage = 'shape';
         info.outerIteration = iteration;
         info.outerBacktrack = backtrack;
@@ -66,8 +68,29 @@ for iteration = 1:o.iterations
             attempts{end+1} = info; %#ok<AGROW>
             continue
         end
+        [constrainedPath,info.meshConstraint] = constrainCrackToMesh(candidate.pathXY,Mesh);
+        if ~info.meshConstraint.valid || ~crackPathInDomain(constrainedPath,fixedMask)
+            info.accepted = false;
+            info.reason = 'invalid-mesh-constrained-contour';
+            attempts{end+1} = info; %#ok<AGROW>
+            continue
+        end
         [snappedPath,info.tipSnap] = snapCrackTipsToElements( ...
-            candidate.pathXY,Mesh,o.tipSnap,fixedMask);
+            constrainedPath,Mesh,o.tipSnap,fixedMask);
+        screenInput = R;
+        screenInput(~fixedMask) = NaN;
+        scoreMap = screenResidual2D(screenInput,info.screeningWindowSize,0,0,0);
+        info.meanScreeningAfter = scoreCrackPathInROI(snappedPath,scoreMap,fixedMask);
+        if info.meanScreeningAfter<=info.meanScreeningBefore+ ...
+                1e-8*max(1,info.meanScreeningBefore)
+            info.accepted = false;
+            info.reason = 'mesh-constrained-score-not-improved';
+            attempts{end+1} = info; %#ok<AGROW>
+            continue
+        end
+        info.meanResidualAfter = info.meanScreeningAfter;
+        info.unconstrainedPathMotion = info.maxPathMotion;
+        info.maxPathMotion = max(crackProjection2D(LS.pathXY,snappedPath));
         candidate = crackLevelSets2D(snappedPath,size(f));
         [trial,trialR,trialStat] = solveGeometry(f,g,Mesh,candidate.pathXY,solution,o.correlation);
         coverage = all(isfinite(trialR(fixedMask)));
@@ -76,6 +99,13 @@ for iteration = 1:o.iterations
         info.previousRMS = rmsValue;
         info.solveStatus = trialStat.status;
         info.accepted = coverage && trialRMS<rmsValue-o.minimumImprovement;
+        if info.accepted
+            info.reason = 'accepted-shape';
+        elseif ~coverage
+            info.reason = 'lost-residual-coverage';
+        else
+            info.reason = 'global-rms-not-improved';
+        end
         attempts{end+1} = info; %#ok<AGROW>
         if ~info.accepted
             continue

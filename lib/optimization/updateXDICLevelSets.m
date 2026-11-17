@@ -46,11 +46,11 @@ screenMask=isfinite(screened);
 % They never supply search targets or propagation speed; no raw-R fallback.
 scoreMap=screened;
 scoreMap(~screenMask)=0;
-before=pathScore(path,scoreMap,mask);
+before=scoreCrackPathInROI(path,scoreMap,mask);
 
 raw=screened;
-% NaNs deliberately invalidate finite-difference stencils at ROI boundaries.
-[gradientX,gradientY]=gradient(screened);
+% Use one-sided differences and masked interpolation near ROI boundaries.
+[gradientX,gradientY]=gradientInROI(screened,screenMask);
 gradientSupport=isfinite(gradientX) & isfinite(gradientY);
 n=size(path,1);
 supported=false(n,1);
@@ -67,8 +67,8 @@ for k=1:n
     normal=[-tangent(2),tangent(1)];
     normals(k,:)=normal;
     if strcmp(o.velocityMethod,'gradient')
-        gx=interp2(gradientX,path(k,1),path(k,2),'linear',NaN);
-        gy=interp2(gradientY,path(k,1),path(k,2),'linear',NaN);
+        gx=sampleROIImage(gradientX,mask,path(k,:));
+        gy=sampleROIImage(gradientY,mask,path(k,:));
         if ~isfinite(gx) || ~isfinite(gy)
             continue
         end
@@ -80,8 +80,8 @@ for k=1:n
         continue
     end
     q=path(k,:)+samples.*normal;
-    v=interp2(raw,q(:,1),q(:,2),'linear',NaN);
-    allowed=interp2(double(mask),q(:,1),q(:,2),'linear',0)>1-1e-10 & isfinite(v);
+    v=sampleROIImage(raw,mask,q);
+    allowed=isfinite(v);
     % Search only the contiguous valid interval containing the original point.
     if ~allowed(center)
         continue
@@ -122,7 +122,8 @@ info=struct('accepted',false,'reason','stationary','meanResidualBefore',before, 
     'duration',0,'maxPathMotion',0,'substeps',0, ...
     'screeningWindowSize',o.screeningWindowSize,'validScreeningCenters',nnz(screenMask), ...
     'meanScreeningBefore',before,'meanScreeningAfter',before, ...
-    'velocityMethod',o.velocityMethod);
+    'velocityMethod',o.velocityMethod,'supportedPathPoints',nnz(supported), ...
+    'emptyContourTrials',0,'nonImprovingContourTrials',0);
 if max(abs(velocity))<1e-10
     return
 end
@@ -143,10 +144,12 @@ for attempt=0:o.maxBacktracks
     candidate=finiteContour(phi,predictedTips,path,mask, ...
         max(o.searchRadius,o.maxNormalStep*o.duration));
     if isempty(candidate)
+        info.emptyContourTrials=info.emptyContourTrials+1;
         continue
     end
-    score=pathScore(candidate,scoreMap,mask);
+    score=scoreCrackPathInROI(candidate,scoreMap,mask);
     if score<=before+1e-8*max(1,before)
+        info.nonImprovingContourTrials=info.nonImprovingContourTrials+1;
         continue
     end
     updated=crackLevelSets2D(candidate,size(R));
@@ -158,18 +161,6 @@ for attempt=0:o.maxBacktracks
     info.substeps=propagation.substeps;
     info.maxPathMotion=max(crackProjection2D(path,candidate));
     return
-end
-end
-
-function score=pathScore(path,R,mask)
-s=[0;cumsum(vecnorm(diff(path),2,2))];
-q=interp1(s,path,linspace(0,s(end),max(2,ceil(s(end)*2)+1))');
-values=interp2(abs(double(R)),q(:,1),q(:,2),'linear',NaN);
-valid=interp2(double(mask),q(:,1),q(:,2),'linear',0)>1-1e-10;
-if any(~valid | ~isfinite(values))
-    score=-Inf;
-else
-    score=mean(values);
 end
 end
 
