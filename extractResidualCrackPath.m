@@ -6,6 +6,7 @@ addpath(projectRoot);
 setupPaths;
 windowSize=[23 23]; % used only if rho is not already present
 numBins=256;
+tipDirectionLength = 10; % arc-length span [px] for the outward tip direction
 graphOptions=struct('MaxGap',100,'MinComponentDiameter',25, ...
     'MaxVertexDensity',2);
 if ~exist('rho','var')
@@ -15,8 +16,13 @@ end
 [binaryCrack,automaticThreshold,thresholdInfo]=valleyOtsuThreshold(rho,numBins);
 crackSkeleton=thinCrackMask(binaryCrack);
 graphOptions.ValidMask=isfinite(rho);
-[crackPathXY,crackPathMask,crackGraph,graphInfo]= ...
+[crackPathXY,~,crackGraph,graphInfo]= ...
     connectCrackGraph(crackSkeleton,graphOptions);
+% Extend the selected ordered skeleton path, preserving the graph for diagnostics.
+skeletonPathXY = crackPathXY;
+[crackPathXY,crackPathMask,tipExtension] = extendCrackPathToMask( ...
+    skeletonPathXY,binaryCrack,tipDirectionLength);
+fprintf('Tip extensions: %.3f / %.3f px.\n',tipExtension.extensionLengths);
 fprintf('Valley threshold: %.6g GL; foreground: %d pixels.\n', ...
     automaticThreshold,nnz(binaryCrack));
 fprintf('Components: %d initial, %d removed, %d remaining; %d gap links.\n', ...
@@ -48,7 +54,9 @@ title(ax,'Valley-emphasis threshold');
 ax=nexttile;
 imagesc(ax,binaryCrack);
 axis(ax,'image');
-title(ax,'Binary crack mask');
+hold(ax,'on');
+plot(ax,crackPathXY(:,1),crackPathXY(:,2),'r-','LineWidth',1.5);
+title(ax,'Binary mask and endpoint-extended path');
 ax=nexttile;
 imagesc(ax,crackSkeleton);
 axis(ax,'image');
@@ -95,7 +103,8 @@ mappingDisplacementSource = 'InitialValues/DisplacementInit.mat';
 save(fullfile(crackFolder,'CrackPathInit.mat'), ...
     'crackPathXY','crackPathReferenceXY','crackPathDeformedXY', ...
     'crackPathDisplacementXY','coordinateFrame','mappingConvention', ...
-    'mappingDisplacementSource','crackPathMask','imageSize','graphInfo','-v7');
+    'mappingDisplacementSource','crackPathMask','imageSize','graphInfo', ...
+    'skeletonPathXY','binaryCrack','crackSkeleton','tipExtension','-v7');
 exportgraphics(gcf,fullfile(crackFolder,'CrackExtraction.png'),'Resolution',160);
 
 % A larger standalone overlay makes pixel-level alignment easier to inspect.
