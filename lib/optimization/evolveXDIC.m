@@ -6,6 +6,7 @@ if nargin<7
     options = struct;
 end
 o = struct('iterations',8,'maxBacktracks',4,'minimumImprovement',1e-6, ...
+    'tipSnap',struct('enabled',true,'fraction',0.25), ...
     'faceGrowth',struct('enabled',true,'maxExtension',10,'tangentLength',10), ...
     'levelSet',struct,'correlation',struct('maxIterations',100));
 names = fieldnames(options);
@@ -21,13 +22,23 @@ validateattributes(o.minimumImprovement,{'numeric'},{'scalar','finite','nonnegat
 if ~isfolder(folder)
     mkdir(folder);
 end
+geometryPrep = prepareXDIC(Mesh,size(f),[]);
+geometryMask = false(size(f));
+geometryMask(geometryPrep.pixelIndex) = true;
+[path,initialSnap] = snapCrackTipsToElements(path,Mesh,o.tipSnap,geometryMask);
 LS = crackLevelSets2D(path,size(f));
-[solution,~,R,stat] = correlateXDIC(f,g,Mesh,path,initial,o.correlation);
+if isstruct(initial) && isfield(initial,'standard') && isfield(initial,'enrichedNodes')
+    [solution,R,stat] = solveGeometry(f,g,Mesh,path,initial,o.correlation);
+else
+    assert(~isstruct(initial) || ~any([initialSnap.snapped]), ...
+        'Snapping changes enrichment: provide nodal initialization or a full XDIC solution.');
+    [solution,~,R,stat] = correlateXDIC(f,g,Mesh,path,initial,o.correlation);
+end
 fixedMask = isfinite(R);
 rmsValue = sqrt(mean(R(fixedMask).^2));
 history = rmsValue;
 paths = {path};
-info = struct('accepted',true,'reason','initial');
+info = struct('accepted',true,'reason','initial','tipSnap',initialSnap);
 saveXDICEvolutionStep(folder,0,LS,solution,R,stat.prep,info,g,Mesh);
 status = 'maximum-iterations';
 attempts = {};
@@ -55,6 +66,9 @@ for iteration = 1:o.iterations
             attempts{end+1} = info; %#ok<AGROW>
             continue
         end
+        [snappedPath,info.tipSnap] = snapCrackTipsToElements( ...
+            candidate.pathXY,Mesh,o.tipSnap,fixedMask);
+        candidate = crackLevelSets2D(snappedPath,size(f));
         [trial,trialR,trialStat] = solveGeometry(f,g,Mesh,candidate.pathXY,solution,o.correlation);
         coverage = all(isfinite(trialR(fixedMask)));
         trialRMS = sqrt(mean(trialR(fixedMask).^2));
@@ -87,6 +101,8 @@ for iteration = 1:o.iterations
         growthInfo = struct('stage','face-growth','outerIteration',iteration, ...
             'accepted',false,'tips',tipInfo,'reason','no-forward-intersection');
         if any([tipInfo.accepted])
+            [grownPath,growthInfo.tipSnap] = snapCrackTipsToElements( ...
+                grownPath,Mesh,o.tipSnap,fixedMask);
             if crackPathInDomain(grownPath,fixedMask)
                 [trial,trialR,trialStat] = solveGeometry(f,g,Mesh,grownPath,solution,o.correlation);
                 trialRMS = sqrt(mean(trialR(fixedMask).^2));
