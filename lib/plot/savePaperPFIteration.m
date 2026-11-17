@@ -18,6 +18,9 @@ graphOptions = struct('MaxGap',0,'MinComponentDiameter',5, ...
 nodes = model.nodes;
 filename = fullfile(folder,sprintf('Iteration_%02d',iteration));
 stateKind = 'staggered iteration';
+if iteration==0
+    stateKind = 'initial damage guess';
+end
 if isempty(history) && iteration>0
     stateKind = 'fixed-displacement calibration trial';
 end
@@ -39,7 +42,11 @@ for panel = 1:3
         im.AlphaData = measurementMask;
         colormap(ax,turbo(256));
         colorbar(ax);
-        title(ax,'Independent damage PDE solution d(x)');
+        if iteration==0
+            title(ax,'Initial damage guess d_0(x)');
+        else
+            title(ax,'Independent damage PDE solution d(x)');
+        end
     else
         imagesc(ax,gOriginal);
         colormap(ax,gray(256));
