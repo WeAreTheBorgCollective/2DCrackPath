@@ -15,6 +15,7 @@ end
 [f,g] = loadDICImages(projectRoot,initial);
 options = struct;
 options.iterations = 8;
+options.faceGrowth = struct('enabled',true,'maxExtension',10,'tangentLength',10);
 % Independent of extraction screening. Set [1 1] for the raw |R| gradient.
 options.levelSet = struct('screeningWindowSize',[5 5], ...
     'gradientGain',0.1,'maxNormalStep',1,'smoothLength',5);

@@ -97,7 +97,7 @@ normal gradient ascent of a local mean absolute residual:
 F=clip(gain * grad(rho).normal, -maxNormalStep, maxNormalStep).
 rho uses the original-image residual f(X)-g(X+uXDIC), never damaged images.
 A configurable [5 5] screening window is independent of extraction screening;
-[1 1] uses raw absolute residual. Complete finite windows are required.
+[1 1] uses raw absolute residual. Partial windows use only finite ROI samples; outside-ROI centers remain NaN.
 Tangential speed smoothing and a CFL bound stabilize proposals.
 
 This gradient velocity is an adaptation, not the paper's Eqs.35–36,
@@ -106,8 +106,8 @@ levelSet.velocityMethod='maximum' to use that alternative. Signed-distance
 reconstruction from the propagated contour substitutes for PDE
 reinitialization Eq.33. Front planes are reconstructed orthogonal to the
 moving endpoint tangents; endpoints follow normal surface motion. There is
-no separately calibrated tangential tip-growth law, and no singular tip
-functions. Thus the geometric tip is not guaranteed to be the exact point
+a separate geometric tip-growth heuristic based on forward intersections of
+crack-face rays (see docs/face-growth.md), but no singular tip functions. Thus the geometric tip is not guaranteed to be the exact point
 where the displacement jump vanishes in the tip element.
 
 After each proposal, rebuild enrichment and transfer amplitudes by node ID,

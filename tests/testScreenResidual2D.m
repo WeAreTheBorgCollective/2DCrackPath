@@ -13,11 +13,11 @@ R = reshape(sin(1:99),9,11);
 R(5,6) = NaN; R(2,9) = Inf;
 [rho,~,eligible] = screenResidual2D(R,[3 5],0,5,3);
 expected = nan(size(R));
-for y = 2:8
-    for x = 3:9
-        patch = R(y-1:y+1,x-2:x+2);
-        if all(isfinite(patch(:)))
-            expected(y,x) = mean(abs(patch(:)));
+for y = 1:size(R,1)
+    for x = 1:size(R,2)
+        patch = R(max(1,y-1):min(end,y+1),max(1,x-2):min(end,x+2));
+        if isfinite(R(y,x))
+            expected(y,x) = mean(abs(patch(isfinite(patch))));
         end
     end
 end
@@ -53,4 +53,15 @@ verifyError(testCase,@()screenResidual2D(ones(7),[2 3],0,5,5), ...
     'screenResidual2D:WindowSize');
 verifyError(testCase,@()screenResidual2D(ones(7),[9 3],0,5,5), ...
     'screenResidual2D:WindowSize');
+end
+
+function testMaskedBoundaryDoesNotDilute(testCase)
+R = 1000*ones(7);
+roi = false(7);
+roi(1:4,1:3) = true;
+R(roi) = -6;
+[rho,~,eligible] = screenResidual2D(R,[3 5],0,0,0,roi);
+verifyEqual(testCase,rho(roi),6*ones(nnz(roi),1),'AbsTol',1e-12);
+verifyTrue(testCase,all(isnan(rho(~roi))));
+verifyEqual(testCase,eligible,roi);
 end

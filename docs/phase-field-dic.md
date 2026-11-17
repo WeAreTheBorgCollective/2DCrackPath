@@ -78,7 +78,7 @@ levelSetOptions = struct( ...
 
 Odd rectangular windows such as [7 15] are supported. [1 1] uses the absolute
 raw residual. Each step recomputes rho = mean(abs(R)) over the chosen centered
-window. Only complete finite windows inside the ROI are eligible.
+window. Partial windows average only finite ROI samples; outside-ROI centers remain NaN.
 
 Normal velocity is `F = clip(gradientGain * grad(rho).normal, +/-maxNormalStep)`,
 smoothed along arclength. Gain has units px^2/GL per virtual time, the speed cap

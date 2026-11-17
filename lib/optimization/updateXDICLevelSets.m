@@ -8,7 +8,7 @@ function [updated,info] = updateXDICLevelSets(LS,R,mask,options)
 % Front positions follow the moving surface normally; no independent
 % tangential growth law is assumed. All three fields are reconstructed from
 % the accepted zero contour instead of using reinitialization PDE Eq.33.
-% Full-window residual screening is optional; [1 1] uses raw |R|.
+% ROI-aware partial-window residual screening is optional; [1 1] uses raw |R|.
 % This proposes geometry only; evolveXDIC re-solves and checks global RMS.
 if nargin < 4
     options = struct();
@@ -42,7 +42,7 @@ screenInput=double(R);
 screenInput(~mask)=NaN;
 [screened,~,~]=screenResidual2D(screenInput,o.screeningWindowSize,0,0,0);
 screenMask=isfinite(screened);
-% Invalid full-window centers contribute zero to the whole-path score.
+% Invalid ROI centers contribute zero to the whole-path score.
 % They never supply search targets or propagation speed; no raw-R fallback.
 scoreMap=screened;
 scoreMap(~screenMask)=0;
