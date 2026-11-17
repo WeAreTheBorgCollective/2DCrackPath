@@ -1,5 +1,26 @@
 #include "xdic_common.hpp"
 using namespace xdic;
+// Border tips do not leave an uncut ligament inside the traversed triangle.
+static bool strictlyInside(Point p,const std::array<Point,3>& t) {
+    auto n=bary(p,t);
+    return *std::min_element(n.begin(),n.end())>1e-9;
+}
+// A mere edge/vertex touch must not mark the neighboring element as cut.
+static bool crossesInterior(Point a,Point b,const std::array<Point,3>& t) {
+    auto na=bary(a,t),nb=bary(b,t);
+    double lo=0,hi=1;
+    for(int j=0;j<3;++j) {
+        double delta=nb[j]-na[j];
+        if(std::abs(delta)<1e-14) {
+            if(na[j]<=1e-9) return false;
+        } else {
+            double limit=(1e-9-na[j])/delta;
+            if(delta>0) lo=std::max(lo,limit);
+            else hi=std::min(hi,limit);
+        }
+    }
+    return hi>lo && (hi-lo)*std::sqrt(dot(subtract(b,a),subtract(b,a)))>1e-8;
+}
 void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
     require(nrhs==4 && nlhs==1,"prep=xdicPrepMex(nodesXY,triangles,imageSize,crackXY).");
     const double* pos=doubles(prhs[0]);
@@ -45,9 +66,9 @@ void prepare(int nlhs,mxArray* plhs[],int nrhs,const mxArray* prhs[]) {
         double area2=orient(t[0],t[1],t[2]);
         require(std::isfinite(area2) && std::abs(area2)>1e-10,"Degenerate triangle.");
         if(nc) {
-            bool containsTip=inside(crack.front(),t) || inside(crack.back(),t);
+            bool containsTip=strictlyInside(crack.front(),t) || strictlyInside(crack.back(),t);
             for(mwSize k=1;k<nc;++k)
-                if(segmentTouchesTriangle(crack[k-1],crack[k],t)) { cut[e]=true; break; }
+                if(crossesInterior(crack[k-1],crack[k],t)) { cut[e]=true; break; }
             for(int j=0;j<3;++j) {
                 if(containsTip) tip[triangles[e][j]]=true;
                 // Shared nodes stay enriched when incident to a fully cut element.
