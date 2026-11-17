@@ -1,9 +1,10 @@
-function [rho, candidates, eligible] = screenResidual2D(R, windowSize, threshold, maxCandidates, minDistance)
+function [rho, candidates, eligible] = screenResidual2D(R, windowSize, threshold, maxCandidates, minDistance, roiMask)
 %SCREENRESIDUAL2D Rank centered rectangular windows by mean absolute residual.
 %   windowSize = [height width] in pixels; both dimensions must be odd.
 %   rho(y,x) = mean(abs(R(window centered at row y, column x))).
 %   This is the screening statistic in Report, Section 4.2 (units: GL).
-%   Only complete, finite windows are eligible; other scores are NaN.
+%   Partial windows use only finite ROI samples; outside-ROI centers stay NaN.
+%   Optional roiMask excludes pixels even when their residual is finite.
 %   Candidates exceed threshold strictly and are ranked by decreasing rho.
 %   Greedy selection enforces Euclidean center separation >= minDistance.
 %   Ties are resolved by MATLAB linear index (column first, then row).
@@ -25,14 +26,19 @@ validateattributes(minDistance, {'numeric'}, {'real','finite','scalar','nonnegat
 
 R = double(R);
 valid = isfinite(R);
+if nargin>=6
+    validateattributes(roiMask,{'logical'},{'size',size(R)});
+    valid = valid & roiMask;
+end
 values = abs(R);
 values(~valid) = 0;
 % Separable box sums avoid storing every extracted window.
-h = windowSize(1); w = windowSize(2);
+h = windowSize(1);
+w = windowSize(2);
 sums = conv2(ones(h,1), ones(1,w), values, 'same');
 counts = conv2(ones(h,1), ones(1,w), double(valid), 'same');
-rho = sums / (h*w);
-rho(counts ~= h*w) = NaN;
+rho = nan(size(R));
+rho(valid) = sums(valid)./counts(valid);
 eligible = isfinite(rho) & rho > threshold;
 
 ids = find(eligible);

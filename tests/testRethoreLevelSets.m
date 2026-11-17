@@ -63,14 +63,14 @@ verifyGreaterThan(tc,median(new.pathXY(:,2)),40);
 verifyEqual(tc,screen.screeningWindowSize,[7 3]);
 verifyGreaterThan(tc,screen.meanScreeningAfter,screen.meanScreeningBefore);
 end
-function testDefaultWindowAndNoCompleteWindows(tc)
+function testDefaultWindowOnNarrowROI(tc)
 R=ones(50,60);
 mask=false(size(R));
 mask(20:30,:)=true;
 LS=crackLevelSets2D([15 25;45 25],size(R));
 [new,~,info]=updateCrackLevelSetsRethore(LS,R,mask,struct());
 verifyEqual(tc,info.screeningWindowSize,[23 23]);
-verifyEqual(tc,info.validScreeningCenters,0);
+verifyEqual(tc,info.validScreeningCenters,nnz(mask));
 verifyFalse(tc,info.accepted);
 verifyEqual(tc,new,LS);
 verifyEqual(tc,info.velocity,zeros(2,1));
