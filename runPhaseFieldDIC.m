@@ -19,8 +19,7 @@ levelSetOptions = struct( ...
 
 initial = load(fullfile(projectRoot,'InitialValues','DisplacementInit.mat'));
 crack = load(fullfile(projectRoot,'CrackPaths','CrackPathInit.mat'),'crackPathXY');
-f = single(imread(fullfile(projectRoot,'Slike','reference.tif')));
-g = single(imread(fullfile(projectRoot,'Slike','deformed.tif')));
+[f,g] = loadDICImages(projectRoot,initial);
 if ~isequal(size(f),size(g),initial.imageSize)
     error('runPhaseFieldDIC:Size','Initialization and images must have the same size.');
 end

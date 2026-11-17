@@ -21,8 +21,9 @@ end
 % This entry point always uses raw images, including if stale overrides exist.
 p.displacementSmoothing = 0;
 % Calibrate the Table 3 values for your experiment before quantitative use.
-fOriginal = double(imread(fullfile(projectRoot,'Slike','reference.tif')));
-gOriginal = double(imread(fullfile(projectRoot,'Slike','deformed.tif')));
+[fOriginal,gOriginal] = loadDICImages(projectRoot);
+fOriginal = double(fOriginal);
+gOriginal = double(gOriginal);
 if ~isequal(size(fOriginal),size(gOriginal))
     error('paperPF:Images','Reference and deformed images must have the same size.');
 end

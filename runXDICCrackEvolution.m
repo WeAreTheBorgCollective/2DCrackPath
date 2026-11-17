@@ -12,8 +12,7 @@ elseif isfield(data,'coordinateFrame') && strcmp(data.coordinateFrame,'reference
 else
     error('xdic:Frame','Reference-frame crack coordinates are required.');
 end
-f = single(imread(fullfile(projectRoot,'Slike','reference.tif')));
-g = single(imread(fullfile(projectRoot,'Slike','deformed.tif')));
+[f,g] = loadDICImages(projectRoot,initial);
 options = struct;
 options.iterations = 8;
 % Independent of extraction screening. Set [1 1] for the raw |R| gradient.

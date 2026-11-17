@@ -15,8 +15,7 @@ elseif isfield(pathData,'coordinateFrame') && strcmp(pathData.coordinateFrame,'r
 else
     error('xdic:Frame','CrackPathInit must explicitly contain reference-frame coordinates.');
 end
-f = single(imread(fullfile(projectRoot,'Slike','reference.tif')));
-g = single(imread(fullfile(projectRoot,'Slike','deformed.tif')));
+[f,g] = loadDICImages(projectRoot,initial);
 Mesh = initial.Mesh;
 [aRegular,~,RRegular] = correlate(f,g,Mesh,initial.a, ...
     'plot_freq',0,'max_iter',100,'conv_limit',1e-6);

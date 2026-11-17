@@ -70,7 +70,7 @@ if size(crackPathXY,1)<2
     error('extractResidualCrackPath:Empty','No usable crack path; initialization was not saved.');
 end
 initial = load(fullfile(projectRoot,'InitialValues','DisplacementInit.mat'));
-g = imread(fullfile(projectRoot,'Slike','deformed.tif'));
+[~,g] = loadDICImages(projectRoot,initial);
 if ~isequal(size(rho),size(g),initial.imageSize)
     error('extractResidualCrackPath:ImageSize','Screening, displacement and image sizes must match.');
 end
