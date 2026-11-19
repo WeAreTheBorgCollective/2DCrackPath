@@ -1,3 +1,6 @@
+clc
+clear all
+close all
 %% Select a case from screeningCases.m.
 % Set screeningCaseName before running to select another case.
 % Example: screeningCaseName = 'composite050'; example2Dscreening
