@@ -6,11 +6,13 @@ addpath(projectRoot);
 setupPaths;
 windowSize=[23 23]; % used only if rho is not already present
 numBins=256;
+normalSearch = struct('radius',30,'density',1); % samples per pixel on each side
 tipDirectionLength = 10; % arc-length span [px] for the outward tip direction
 graphOptions=struct('MaxGap',100,'MinComponentDiameter',25, ...
     'MaxVertexDensity',2);
+data=load(fullfile(projectRoot,'Residual','R.mat'),'R');
+initial = load(fullfile(projectRoot,'InitialValues','DisplacementInit.mat'));
 if ~exist('rho','var')
-    data=load(fullfile(projectRoot,'Residual','R.mat'),'R');
     [rho,~,~]=screenResidual2D(data.R,windowSize,0,0,0);
 end
 [binaryCrack,automaticThreshold,thresholdInfo]=valleyOtsuThreshold(rho,numBins);
@@ -20,8 +22,18 @@ graphOptions.ValidMask=isfinite(rho);
     connectCrackGraph(crackSkeleton,graphOptions);
 % Extend the selected ordered skeleton path, preserving the graph for diagnostics.
 skeletonPathXY = crackPathXY;
-[crackPathXY,crackPathMask,tipExtension] = extendCrackPathToMask( ...
+[crackPathXY,~,tipExtension] = extendCrackPathToMask( ...
     skeletonPathXY,binaryCrack,tipDirectionLength);
+% Search raw |R| after endpoint extension, then replace the ordered EG nodes.
+preNormalPathXY = crackPathXY;
+assert(isequal(size(data.R),size(rho),initial.imageSize), ...
+    'Residual, screening and initialization sizes must match.');
+[crackPathXY,refinedCrackGraph,crackPathMask,normalSearchInfo] = ...
+    refineCrackPathNormalMaximum(preNormalPathXY,data.R,normalSearch,initial.Mesh);
+if ~normalSearchInfo.validForLevelSets
+    warning('extractResidualCrackPath:NormalSearchGeometry', ...
+        'Independent maxima created a crossing/collapsed/out-of-ROI path. Inspect the saved trial before XDIC.');
+end
 fprintf('Tip extensions: %.3f / %.3f px.\n',tipExtension.extensionLengths);
 fprintf('Valley threshold: %.6g GL; foreground: %d pixels.\n', ...
     automaticThreshold,nnz(binaryCrack));
@@ -56,28 +68,24 @@ imagesc(ax,binaryCrack);
 axis(ax,'image');
 hold(ax,'on');
 plot(ax,crackPathXY(:,1),crackPathXY(:,2),'r-','LineWidth',1.5);
-title(ax,'Binary mask and endpoint-extended path');
+title(ax,'Binary mask and normal-refined path');
 ax=nexttile;
 imagesc(ax,crackSkeleton);
 axis(ax,'image');
 title(ax,'One-pixel-wide skeleton');
 ax=nexttile;
-if numnodes(crackGraph)>0
-    p=plot(ax,crackGraph,'XData',crackGraph.Nodes.X,'YData',crackGraph.Nodes.Y, ...
-        'Marker','none','NodeLabel',{},'EdgeColor',[0.2 0.5 0.8]);
-    bridgeIDs=find(crackGraph.Edges.IsBridge);
-    if ~isempty(bridgeIDs)
-        highlight(p,'Edges',bridgeIDs,'EdgeColor','r','LineWidth',2);
-    end
-end
+plot(ax,refinedCrackGraph,'XData',refinedCrackGraph.Nodes.X, ...
+    'YData',refinedCrackGraph.Nodes.Y,'Marker','none','NodeLabel',{}, ...
+    'EdgeColor','r');
+hold(ax,'on');
+plot(ax,preNormalPathXY(:,1),preNormalPathXY(:,2),'k:');
 axis(ax,'image');
 set(ax,'YDir','reverse');
-title(ax,'Retained graph (red = inferred gaps)');
+title(ax,'Normal-refined EG (red), original path (dotted)');
 %% Map the extracted reference-grid path to the original deformed image
 if size(crackPathXY,1)<2
     error('extractResidualCrackPath:Empty','No usable crack path; initialization was not saved.');
 end
-initial = load(fullfile(projectRoot,'InitialValues','DisplacementInit.mat'));
 [~,g] = loadDICImages(projectRoot,initial);
 if ~isequal(size(rho),size(g),initial.imageSize)
     error('extractResidualCrackPath:ImageSize','Screening, displacement and image sizes must match.');
@@ -104,7 +112,8 @@ save(fullfile(crackFolder,'CrackPathInit.mat'), ...
     'crackPathXY','crackPathReferenceXY','crackPathDeformedXY', ...
     'crackPathDisplacementXY','coordinateFrame','mappingConvention', ...
     'mappingDisplacementSource','crackPathMask','imageSize','graphInfo', ...
-    'skeletonPathXY','binaryCrack','crackSkeleton','tipExtension','-v7');
+    'skeletonPathXY','binaryCrack','crackSkeleton','tipExtension', ...
+    'preNormalPathXY','refinedCrackGraph','crackGraph','normalSearchInfo','-v7');
 exportgraphics(gcf,fullfile(crackFolder,'CrackExtraction.png'),'Resolution',160);
 
 % A larger standalone overlay makes pixel-level alignment easier to inspect.
