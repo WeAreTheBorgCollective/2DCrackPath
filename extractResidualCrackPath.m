@@ -1,3 +1,6 @@
+clc
+clear all
+close all
 %% Automatic residual thresholding, thinning and Euclidean crack path
 % Run after screenResidualImage to reuse rho, or standalone to compute it.
 % An existing rho is used unchanged. Clear rho to recompute from R.mat.
