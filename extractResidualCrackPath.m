@@ -6,7 +6,9 @@ addpath(projectRoot);
 setupPaths;
 windowSize=[23 23]; % used only if rho is not already present
 numBins=256;
-normalSearch = struct('radius',30,'density',1); % samples per pixel on each side
+fixedFieldSource = 'rho'; % 'rho' or 'residual' (absolute raw residual)
+fixedFieldOptions = struct('maxIterations',30,'gradientGain',0.1, ...
+    'maxNormalStep',0.5,'smoothLength',3,'motionTolerance',0.02);
 tipDirectionLength = 10; % arc-length span [px] for the outward tip direction
 graphOptions=struct('MaxGap',100,'MinComponentDiameter',25, ...
     'MaxVertexDensity',2);
@@ -24,16 +26,22 @@ graphOptions.ValidMask=isfinite(rho);
 skeletonPathXY = crackPathXY;
 [crackPathXY,~,tipExtension] = extendCrackPathToMask( ...
     skeletonPathXY,binaryCrack,tipDirectionLength);
-% Search raw |R| after endpoint extension, then replace the ordered EG nodes.
-preNormalPathXY = crackPathXY;
-assert(isequal(size(data.R),size(rho),initial.imageSize), ...
-    'Residual, screening and initialization sizes must match.');
-[crackPathXY,refinedCrackGraph,crackPathMask,normalSearchInfo] = ...
-    refineCrackPathNormalMaximum(preNormalPathXY,data.R,normalSearch,initial.Mesh);
-if ~normalSearchInfo.validForLevelSets
-    warning('extractResidualCrackPath:NormalSearchGeometry', ...
-        'Independent maxima created a crossing/collapsed/out-of-ROI path. Inspect the saved trial before XDIC.');
+preRefinementPathXY = crackPathXY;
+assert(isequal(size(rho),size(data.R),initial.imageSize),'Input image sizes must agree.');
+switch fixedFieldSource
+    case 'rho'
+        fixedField = rho;
+    case 'residual'
+        fixedField = abs(double(data.R));
+    otherwise
+        error('extractResidualCrackPath:Field','Choose rho or residual.');
 end
+fixedField(~initial.measurementMask | ~isfinite(data.R)) = NaN;
+fixedFieldResult = refineCrackPathFixedField( ...
+    preRefinementPathXY,fixedField,initial.Mesh,fixedFieldOptions);
+crackPathXY = fixedFieldResult.pathXY;
+crackPathMask = fixedFieldResult.pathMask;
+refinedCrackGraph = fixedFieldResult.graph;
 fprintf('Tip extensions: %.3f / %.3f px.\n',tipExtension.extensionLengths);
 fprintf('Valley threshold: %.6g GL; foreground: %d pixels.\n', ...
     automaticThreshold,nnz(binaryCrack));
@@ -68,20 +76,19 @@ imagesc(ax,binaryCrack);
 axis(ax,'image');
 hold(ax,'on');
 plot(ax,crackPathXY(:,1),crackPathXY(:,2),'r-','LineWidth',1.5);
-title(ax,'Binary mask and normal-refined path');
+title(ax,'Binary mask and fixed-field refined path');
 ax=nexttile;
 imagesc(ax,crackSkeleton);
 axis(ax,'image');
 title(ax,'One-pixel-wide skeleton');
 ax=nexttile;
-plot(ax,refinedCrackGraph,'XData',refinedCrackGraph.Nodes.X, ...
-    'YData',refinedCrackGraph.Nodes.Y,'Marker','none','NodeLabel',{}, ...
-    'EdgeColor','r');
+plot(ax,preRefinementPathXY(:,1),preRefinementPathXY(:,2),'k:');
 hold(ax,'on');
-plot(ax,preNormalPathXY(:,1),preNormalPathXY(:,2),'k:');
+plot(ax,refinedCrackGraph,'XData',refinedCrackGraph.Nodes.X, ...
+    'YData',refinedCrackGraph.Nodes.Y,'Marker','none','NodeLabel',{},'EdgeColor','r');
 axis(ax,'image');
 set(ax,'YDir','reverse');
-title(ax,'Normal-refined EG (red), original path (dotted)');
+title(ax,'Initial (dotted) and fixed-field refined graph (red)');
 %% Map the extracted reference-grid path to the original deformed image
 if size(crackPathXY,1)<2
     error('extractResidualCrackPath:Empty','No usable crack path; initialization was not saved.');
@@ -113,7 +120,9 @@ save(fullfile(crackFolder,'CrackPathInit.mat'), ...
     'crackPathDisplacementXY','coordinateFrame','mappingConvention', ...
     'mappingDisplacementSource','crackPathMask','imageSize','graphInfo', ...
     'skeletonPathXY','binaryCrack','crackSkeleton','tipExtension', ...
-    'preNormalPathXY','refinedCrackGraph','crackGraph','normalSearchInfo','-v7');
+    'preRefinementPathXY','refinedCrackGraph','fixedFieldSource','-v7');
+save(fullfile(crackFolder,'FixedFieldRefinement.mat'), ...
+    'fixedFieldResult','fixedFieldSource','preRefinementPathXY','-v7.3');
 exportgraphics(gcf,fullfile(crackFolder,'CrackExtraction.png'),'Resolution',160);
 
 % A larger standalone overlay makes pixel-level alignment easier to inspect.
@@ -122,3 +131,28 @@ ax = axes(overlayFigure);
 plotCrackOnDeformed(ax,g,crackPathReferenceXY,initial.Mesh,initial.a, ...
     'Extracted crack mapped by initial displacement onto original deformed image');
 exportgraphics(overlayFigure,fullfile(crackFolder,'CrackOnDeformed.png'),'Resolution',160);
+
+% Save the actual accepted progression against the same frozen score field.
+progressFigure = figure('Color','w','Position',[50 50 1200 500]);
+tiledlayout(1,2);
+ax = nexttile;
+h = imagesc(ax,fixedField);
+h.AlphaData = isfinite(fixedField);
+colormap(ax,flipud(gray));
+axis(ax,'image');
+hold(ax,'on');
+selected = unique(round(linspace(1,numel(fixedFieldResult.pathHistory),4)));
+colors = lines(numel(selected));
+for k = 1:numel(selected)
+    points = fixedFieldResult.pathHistory{selected(k)};
+    plot(ax,points(:,1),points(:,2),'Color',colors(k,:),'LineWidth',1.5, ...
+        'DisplayName',sprintf('Step %d',selected(k)-1));
+end
+legend(ax,'Location','best');
+title(ax,'Gradient shape evolution on fixed field');
+ax = nexttile;
+plot(ax,0:numel(fixedFieldResult.scoreHistory)-1,fixedFieldResult.scoreHistory,'o-');
+xlabel(ax,'Accepted shape step');
+ylabel(ax,'Mean fixed-field score [GL]');
+grid(ax,'on');
+exportgraphics(progressFigure,fullfile(crackFolder,'FixedFieldRefinement.png'),'Resolution',160);
